@@ -1,10 +1,7 @@
 package com.madirex;
 
 import com.madirex.controllers.FunkoController;
-import com.madirex.exceptions.FunkoNotFoundException;
-import com.madirex.exceptions.FunkoNotRemovedException;
-import com.madirex.exceptions.FunkoNotSavedException;
-import com.madirex.exceptions.FunkoNotValidException;
+import com.madirex.exceptions.*;
 import com.madirex.models.funko.Funko;
 import com.madirex.models.funko.Model;
 import com.madirex.repositories.funko.FunkoRepositoryImpl;
@@ -70,7 +67,7 @@ public class FunkoProgram {
         Mono<Void> serviceExceptionMono = callAllServiceExceptionMethods();
         Mono<Void> serviceMono = callAllServiceMethods();
         Mono<Void> queriesMono = databaseQueries();
-        Mono<Void> allOperationsMono = Mono.when(loadAndUploadFunkos, serviceExceptionMono, serviceMono, queriesMono);
+        Mono<Void> allOperationsMono = Mono.when(serviceExceptionMono, serviceMono, queriesMono);
         allOperationsMono.doFinally(signalType -> {
             controller.shutdown();
             logger.info("Programa de Funkos finalizado.");
@@ -702,24 +699,20 @@ public class FunkoProgram {
      * @return Datos
      */
     private Flux<Funko> printFindAll() {
+        logger.info("🟢 Probando caso correcto de FindAll...");
+        logger.info("\nFind All:");
         try {
-            logger.info("🟢 Probando caso correcto de FindAll...");
-            logger.info("\nFind All:");
             return controller.findAll()
-                    .doOnEach(foundFunko -> logger.info(foundFunko.toString()))
+                    .doOnNext(foundFunko -> logger.info(foundFunko.toString()))
                     .onErrorResume(e -> {
                         String strError = "No se han encontrado Funkos: " + e;
                         logger.error(strError);
                         return Flux.empty();
                     });
         } catch (SQLException e) {
-            String strError = "Error SQL: " + e.getMessage();
-            logger.error(strError);
-            return Flux.empty();
+            throw new RuntimeException(e);
         } catch (FunkoNotFoundException e) {
-            String strError = "No se ha encontrado el Funko: " + e.getMessage();
-            logger.error(strError);
-            return Flux.empty();
+            throw new RuntimeException(e);
         }
     }
 
@@ -727,25 +720,32 @@ public class FunkoProgram {
      * Lee un archivo CSV y lo inserta en la base de datos de manera asíncrona
      *
      * @param path Ruta del archivo CSV
-     * @return Disposable
+     * @return Mono<Void>
      */
     public Mono<Void> loadFunkosFileAndInsertToDatabase(String path) {
         CsvManager csvManager = CsvManager.getInstance();
 
-        return Mono.fromCallable(() -> {
-            List<Funko> funkos = csvManager.fileToFunkoList(path).collectList().block();
-            funkos.forEach(funko -> {
-                try {
-                    controller.save(funko).onErrorResume(e -> {
-                        logger.error("Error al insertar el Funko en la base de datos: " + e.getMessage());
-                        return Mono.empty();
-                    }).block();
-                } catch (SQLException | FunkoNotSavedException | FunkoNotValidException e) {
-                    throw new RuntimeException(e);
-                }
-            });
-            return null;
-        });
+        try {
+            return csvManager.fileToFunkoList(path)
+                    .flatMap(funko -> {
+                        try {
+                            return controller.save(funko)
+                                    .onErrorResume(e -> {
+                                        logger.error("Error al insertar el Funko en la base de datos: " + e.getMessage());
+                                        return Mono.empty();
+                                    });
+                        } catch (SQLException e) {
+                            throw new RuntimeException(e);
+                        } catch (FunkoNotSavedException e) {
+                            throw new RuntimeException(e);
+                        } catch (FunkoNotValidException e) {
+                            throw new RuntimeException(e);
+                        }
+                    })
+                    .then();
+        } catch (ReadCSVFailException e) {
+            throw new RuntimeException(e);
+        }
     }
 
 }
