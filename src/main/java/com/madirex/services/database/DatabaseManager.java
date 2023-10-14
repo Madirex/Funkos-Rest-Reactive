@@ -1,23 +1,23 @@
 package com.madirex.services.database;
 
 import com.madirex.utils.ApplicationProperties;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 import io.github.cdimascio.dotenv.Dotenv;
-import lombok.NonNull;
-import org.apache.ibatis.jdbc.ScriptRunner;
+import io.r2dbc.pool.ConnectionPool;
+import io.r2dbc.pool.ConnectionPoolConfiguration;
+import io.r2dbc.spi.*;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.Optional;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.time.Duration;
+import java.util.stream.Collectors;
+
+import static io.r2dbc.spi.ConnectionFactoryOptions.*;
 
 /**
  * Controlador de Bases de Datos
@@ -31,23 +31,11 @@ public class DatabaseManager {
     private String password;
     private String driver;
     private String initScript;
-    private Connection connection;
-    private PreparedStatement preparedStatement;
     private String connectionUrl;
     private boolean dataInitialized = false;
-    private final HikariDataSource dataSource;
-
-    /**
-     * Constructor privado para Singleton
-     */
-    private DatabaseManager() {
-        initConfig();
-        HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(connectionUrl);
-        config.setUsername(user);
-        config.setPassword(password);
-        dataSource = new HikariDataSource(config);
-    }
+    private final ConnectionFactory connectionFactory;
+    @Getter
+    private final ConnectionPool pool;
 
     /**
      * Devuelve una instancia del controlador
@@ -62,6 +50,35 @@ public class DatabaseManager {
     }
 
     /**
+     * Constructor privado para Singleton
+     */
+    private DatabaseManager() {
+        initConfig();
+        ConnectionFactoryOptions options = ConnectionFactoryOptions.builder()
+                .option(ConnectionFactoryOptions.DRIVER, "h2")
+                .option(PROTOCOL, "file")  // file, mem
+                .option(USER, user)
+                .option(PASSWORD, password)
+                .option(DATABASE, connectionUrl + databaseName)
+                .build();
+
+        connectionFactory = ConnectionFactories.get(options);
+
+        ConnectionPoolConfiguration configuration = ConnectionPoolConfiguration
+                .builder(connectionFactory)
+                .maxIdleTime(Duration.ofMillis(1000))
+                .maxSize(20)
+                .build();
+
+
+        if (initScript.equalsIgnoreCase("true")) {
+            initData();
+        }
+
+        pool = new ConnectionPool(configuration);
+    }
+
+    /**
      * Carga la configuración de acceso al servidor de Base de Datos
      */
     private synchronized void initConfig() {
@@ -73,242 +90,59 @@ public class DatabaseManager {
         Dotenv dotenv = Dotenv.load();
         user = dotenv.get("DATABASE_USER");
         password = dotenv.get("DATABASE_PASSWORD");
-        connectionUrl = this.driver + ":" + this.serverUrl + File.separator + this.databaseName;
+        connectionUrl = System.getProperty("user.home")
+                .replace("\\", "/") + "/" + this.databaseName;
         logger.debug("Configuración de acceso a la Base de Datos cargada");
     }
 
     /**
-     * Abre la conexión con el servidor  de base de datos
+     * Ejecuta script de inicialización de la base de datos
      *
-     * @throws SQLException Servidor no accesible por problemas de conexión o datos de acceso incorrectos
+     * @param scriptSqlFile Fichero con el script de inicialización
+     * @return Mono<Void> Resultado de la ejecución
      */
-    public synchronized void open() throws SQLException {
-        if (connection != null && !connection.isClosed()) {
-            return;
-        }
-        connection = dataSource.getConnection();
-        try {
-            initData();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public Mono<Void> executeInitScript(String scriptSqlFile) {
+        logger.debug("Ejecutando script de inicialización de la base de datos: " + scriptSqlFile);
+        return Mono.usingWhen(
+                connectionFactory.create(),
+                connection -> {
+                    logger.debug("Creando conexión con la base de datos");
+                    String scriptContent = null;
+                    try {
+                        try (InputStream inputStream = getClass().getClassLoader().getResourceAsStream(scriptSqlFile)) {
+                            if (inputStream == null) {
+                                return Mono.error(new IOException("No se ha encontrado el fichero de script de inicialización."));
+                            } else {
+                                try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+                                    scriptContent = reader.lines().collect(Collectors.joining("\n"));
+                                }
+                            }
+                        }
+                        Statement statement = connection.createStatement(scriptContent);
+                        return Mono.from(statement.execute());
+                    } catch (IOException e) {
+                        return Mono.error(e);
+                    }
+                },
+                Connection::close
+        ).then();
     }
 
     /**
-     * Inicializa la base de datos con los datos del fichero data.sql
+     * Inicializa la base de datos con los datos del fichero init.sql y remove.sql
      * Solo si el properties tiene la propiedad db.init en TRUE
+     *
+     * @throws IOException Error al leer el fichero de inicialización
      */
-    public synchronized void initData() throws SQLException, IOException {
+    public synchronized void initData() {
         if (!dataInitialized && initScript.equalsIgnoreCase("true")) {
-            String sql = new String(Objects.requireNonNull(getClass().getClassLoader()
-                    .getResourceAsStream("data.sql")).readAllBytes(), StandardCharsets.UTF_8);
-            try (PreparedStatement psTry = connection.prepareStatement(sql)) {
-                psTry.execute();
-            }
+            logger.debug("Borrando tablas de la base de datos.");
+            executeInitScript("sql/remove.sql").block();
+            logger.debug("Inicializando tablas de la base de datos.");
+            executeInitScript("sql/init.sql").block();
+            logger.debug("Tabla de la base de datos inicializada.");
             dataInitialized = true;
         }
     }
 
-    /**
-     * Cierra la conexión con el servidor de base de datos
-     */
-    public synchronized void close() {
-        try {
-            preparedStatement.close();
-            connection.close();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
-     * Realiza una consulta a la base de datos de manera "preparada" obteniendo los
-     * parámetros opcionales si son necesarios
-     *
-     * @param querySQL consulta SQL de tipo select
-     * @param params   parámetros de la consulta parametrizada
-     * @return ResultSet de la consulta
-     * @throws SQLException No se ha podido realizar la consulta o la tabla no existe
-     */
-    private synchronized ResultSet executeQuery(@NonNull String querySQL, Object... params) throws SQLException {
-        this.open();
-        var strParams = Arrays.toString(params);
-        logger.debug("Ejecutando consulta: " + querySQL + " con parámetros: " + strParams);
-        preparedStatement = connection.prepareStatement(querySQL);
-        for (int i = 0; i < params.length; i++) {
-            preparedStatement.setObject(i + 1, params[i]);
-        }
-        return preparedStatement.executeQuery();
-    }
-
-    /**
-     * Realiza una consulta select a la base de datos de manera "preparada" obteniendo los
-     * parámetros opcionales si son necesarios
-     *
-     * @param querySQL consulta SQL de tipo select
-     * @param params   parámetros de la consulta parametrizada
-     * @return ResultSet de la consulta
-     * @throws SQLException No se ha podido realizar la consulta o la tabla no existe
-     */
-    public synchronized Optional<ResultSet> select(@NonNull String querySQL, Object... params) throws SQLException {
-        return Optional.of(executeQuery(querySQL, params));
-    }
-
-    /**
-     * Realiza una consulta select a la base de datos de manera "preparada" obteniendo los
-     * parámetros opcionales si son necesarios
-     *
-     * @param querySQL consulta SQL de tipo select
-     * @param limit    número de registros de la página
-     * @param offset   desplazamiento de registros o número de registros ignorados para comenzar la devolución
-     * @param params   parámetros de la consulta parametrizada
-     * @return ResultSet de la consulta
-     * @throws SQLException No se ha podido realizar la consulta o la tabla no existe o el desplazamiento
-     *                      es mayor que el número de registros
-     */
-    public synchronized Optional<ResultSet> select(@NonNull String querySQL, int limit, int offset, Object... params) throws SQLException {
-        String query = querySQL + " LIMIT " + limit + " OFFSET " + offset;
-        return Optional.of(executeQuery(query, params));
-    }
-
-    /**
-     * Realiza una consulta de tipo insert de manera "preparada" con los
-     * parámetros opcionales si son necesarios
-     *
-     * @param insertSQL consulta SQL de tipo insert
-     * @param params    parámetros de la consulta parametrizada
-     * @return Clave del registro insertado
-     * @throws SQLException tabla no existe o no se ha podido realizar la operación
-     */
-    public synchronized Optional<ResultSet> insertAndGetKey(@NonNull String insertSQL, Object... params) throws SQLException {
-        this.open();
-        var strParams = Arrays.toString(params);
-        logger.debug("Ejecutando consulta " + insertSQL + " con parámetros: " + strParams);
-        preparedStatement = connection.prepareStatement(insertSQL, preparedStatement.RETURN_GENERATED_KEYS);
-        for (int i = 0; i < params.length; i++) {
-            preparedStatement.setObject(i + 1, params[i]);
-        }
-        preparedStatement.executeUpdate();
-        return Optional.of(preparedStatement.getGeneratedKeys());
-    }
-
-    /**
-     * Realiza una consulta de tipo insert de manera "preparada" con los
-     * parámetros opcionales si son necesarios
-     *
-     * @param insertSQL consulta SQL de tipo insert
-     * @param params    parámetros de la consulta parametrizada
-     * @return número de registros insertados
-     * @throws SQLException tabla no existe o no se ha podido realizar la operación
-     */
-    public synchronized int insert(@NonNull String insertSQL, Object... params) throws SQLException {
-        return updateQuery(insertSQL, params);
-    }
-
-    /**
-     * Realiza una consulta de tipo update de manera "preparada" con los
-     * parámetros opcionales si son necesarios
-     *
-     * @param updateSQL consulta SQL de tipo update
-     * @param params    parámetros de la consulta parametrizada
-     * @return número de registros actualizados
-     * @throws SQLException tabla no existe o no se ha podido realizar la operación
-     */
-    public synchronized int update(@NonNull String updateSQL, Object... params) throws SQLException {
-        return updateQuery(updateSQL, params);
-    }
-
-    /**
-     * Realiza una consulta de tipo delete de manera "preparada" con los
-     * parámetros opcionales si son necesarios
-     *
-     * @param deleteSQL consulta SQL de tipo delete
-     * @param params    parámetros de la consulta parametrizada
-     * @return número de registros eliminados
-     * @throws SQLException tabla no existe o no se ha podido realizar la operación
-     */
-    public synchronized int delete(@NonNull String deleteSQL, Object... params) throws SQLException {
-        return updateQuery(deleteSQL, params);
-    }
-
-    /**
-     * Realiza una consulta de tipo update. Es decir, modifica los datos de manera "preparada" con los
-     * parámetros opcionales si son necesarios
-     *
-     * @param genericSQL consulta SQL de tipo update, delete, create, etc.. que modifica los datos
-     * @param params     parámetros de la consulta parametrizada
-     * @return número de registros aplicados
-     * @throws SQLException no se ha podido realizar la operación
-     */
-    private synchronized int updateQuery(@NonNull String genericSQL, Object... params) throws SQLException {
-        this.open();
-        var strParams = Arrays.toString(params);
-        logger.debug("Ejecutando consulta " + genericSQL + " con parámetros: " + strParams);
-        preparedStatement = connection.prepareStatement(genericSQL);
-        for (int i = 0; i < params.length; i++) {
-            preparedStatement.setObject(i + 1, params[i]);
-        }
-        return preparedStatement.executeUpdate();
-    }
-
-    /**
-     * Inicia la base de datos con el script pasado como parámetro
-     *
-     * @param genericSQL Script de inicio
-     * @return número de registros aplicados
-     * @throws SQLException no se ha podido realizar la operación
-     */
-    public synchronized int initSQL(String genericSQL) throws SQLException {
-        logger.debug("Datos de inicio: " + genericSQL);
-        return updateQuery(genericSQL);
-    }
-
-    /**
-     * Inicia una transacción
-     *
-     * @throws SQLException No se ha podido realizar la operación
-     */
-    public synchronized void beginTransaction() throws SQLException {
-        if (connection == null) {
-            this.open();
-        }
-        connection.setAutoCommit(false);
-    }
-
-    /**
-     * Commit: Confirma los cambios realizados en la base de datos
-     *
-     * @throws SQLException No se ha podido realizar la operación
-     */
-    public synchronized void commit() throws SQLException {
-        connection.commit();
-        connection.setAutoCommit(true);
-    }
-
-    /**
-     * Rollback: Deshace los cambios realizados en la base de datos
-     *
-     * @throws SQLException No se ha podido realizar la operación
-     */
-    private synchronized void rollback() throws SQLException {
-        connection.rollback();
-        connection.setAutoCommit(true);
-    }
-
-
-    /**
-     * Inicializa la base de datos con los datos del fichero data.sql
-     *
-     * @param sqlFile   Fichero con los datos de la base de datos
-     * @param logWriter Si se quiere mostrar el log de la ejecución
-     * @throws FileNotFoundException No se ha encontrado el fichero
-     * @throws SQLException          No se ha podido realizar la operación
-     */
-    public synchronized void initData(@NonNull String sqlFile, boolean logWriter) throws FileNotFoundException, SQLException {
-        logger.debug("Inicializando datos de fichero: " + sqlFile + " con logWriter: " + logWriter);
-        this.open();
-        var sr = new ScriptRunner(connection);
-        var reader = new BufferedReader(new FileReader(sqlFile));
-        sr.runScript(reader);
-    }
 }
