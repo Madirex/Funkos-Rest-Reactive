@@ -1,5 +1,7 @@
 package com.madirex.services.cache;
 
+import reactor.core.publisher.Mono;
+
 /**
  * Interfaz para la implementación de una caché
  *
@@ -7,11 +9,11 @@ package com.madirex.services.cache;
  * @param <V> Tipo del valor
  */
 public interface Cache<K, V> {
-    void put(K key, V value);
+    Mono<Void> put(K key, V value);
 
-    V get(K key);
+    Mono<V> get(K key);
 
-    void remove(K key);
+    Mono<Void> remove(K key);
 
     void clear();
 

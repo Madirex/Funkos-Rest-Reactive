@@ -4,6 +4,7 @@ import com.madirex.models.Funko;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -48,12 +49,13 @@ public class FunkoCacheImpl implements FunkoCache {
      *
      * @param key   Id
      * @param value Funko
+     * @return Mono<Void>
      */
     @Override
-    public void put(String key, Funko value) {
+    public Mono<Void> put(String key, Funko value) {
         String str = "Añadiendo Funko a caché con ID: " + key + " y valor: " + value;
         logger.debug(str);
-        cache.put(key, value);
+        return Mono.fromRunnable(() -> cache.put(key, value));
     }
 
     /**
@@ -63,22 +65,23 @@ public class FunkoCacheImpl implements FunkoCache {
      * @return Funko
      */
     @Override
-    public Funko get(String key) {
+    public Mono<Funko> get(String key) {
         String str = "Obteniendo Funko de caché con ID: " + key;
         logger.debug(str);
-        return cache.get(key);
+        return Mono.fromRunnable(() -> cache.get(key));
     }
 
     /**
      * Elimina el Funko de la caché
      *
      * @param key Id
+     * @return Mono<Void>
      */
     @Override
-    public void remove(String key) {
+    public Mono<Void> remove(String key) {
         String str = "Eliminando Funko de caché con ID: " + key;
         logger.debug(str);
-        cache.remove(key);
+        return Mono.fromRunnable(() -> cache.remove(key));
     }
 
     /**
