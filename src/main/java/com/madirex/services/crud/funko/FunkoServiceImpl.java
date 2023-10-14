@@ -1,20 +1,20 @@
 package com.madirex.services.crud.funko;
 
-import com.madirex.exceptions.DirectoryException;
 import com.madirex.exceptions.FunkoNotFoundException;
 import com.madirex.exceptions.FunkoNotRemovedException;
-import com.madirex.exceptions.FunkoNotValidException;
-import com.madirex.models.Funko;
+import com.madirex.models.Notification;
+import com.madirex.models.funko.Funko;
 import com.madirex.repositories.funko.FunkoRepositoryImpl;
 import com.madirex.services.cache.FunkoCache;
 import com.madirex.services.io.BackupService;
+import com.madirex.services.notifications.FunkoNotificationImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Implementación de la interfaz FunkoService
@@ -26,33 +26,39 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
     private final Logger logger = LoggerFactory.getLogger(FunkoServiceImpl.class);
     private final FunkoRepositoryImpl funkoRepository;
     private final BackupService<List<Funko>> backupService;
+    private final FunkoNotificationImpl funkoNotification;
 
     /**
      * Constructor de la clase
      *
-     * @param funkoRepository Instancia de la clase FunkoRepository
-     * @param cache           Instancia de la clase FunkoCache
-     * @param backupService   Instancia de la clase BackupService
+     * @param funkoRepository   Instancia de la clase FunkoRepository
+     * @param cache             Instancia de la clase FunkoCache
+     * @param backupService     Instancia de la clase BackupService
+     * @param funkoNotification Instancia de la clase FunkoNotification
      */
-    private FunkoServiceImpl(FunkoRepositoryImpl funkoRepository, FunkoCache cache, BackupService<List<Funko>> backupService) {
+    private FunkoServiceImpl(FunkoRepositoryImpl funkoRepository, FunkoCache cache,
+                             BackupService<List<Funko>> backupService, FunkoNotificationImpl funkoNotification) {
         this.funkoRepository = funkoRepository;
         this.cache = cache;
         this.backupService = backupService;
+        this.funkoNotification = funkoNotification;
     }
 
     /**
      * Devuelve la instancia de la clase
      *
-     * @param funkoRepository Instancia de la clase FunkoRepository
-     * @param cache           Instancia de la clase FunkoCache
-     * @param backupService   Instancia de la clase BackupService
+     * @param funkoRepository   Instancia de la clase FunkoRepository
+     * @param cache             Instancia de la clase FunkoCache
+     * @param backupService     Instancia de la clase BackupService
+     * @param funkoNotification Instancia de la clase FunkoNotification
      * @return Instancia de la clase
      */
     public static synchronized FunkoServiceImpl getInstance(FunkoRepositoryImpl funkoRepository,
                                                             FunkoCache cache,
-                                                            BackupService<List<Funko>> backupService) {
+                                                            BackupService<List<Funko>> backupService,
+                                                            FunkoNotificationImpl funkoNotification) {
         if (funkoServiceImplInstance == null) {
-            funkoServiceImplInstance = new FunkoServiceImpl(funkoRepository, cache, backupService);
+            funkoServiceImplInstance = new FunkoServiceImpl(funkoRepository, cache, backupService, funkoNotification);
         }
         return funkoServiceImplInstance;
     }
@@ -64,7 +70,7 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return Optional de la lista de elementos
      */
     @Override
-    public CompletableFuture<List<Funko>> findAll() {
+    public Flux<Funko> findAll() {
         logger.debug("Obteniendo todos los Funkos");
         return funkoRepository.findAll();
     }
@@ -76,16 +82,15 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return Lista de elementos encontrados
      */
     @Override
-    public CompletableFuture<List<Funko>> findByName(String name) {
+    public Flux<Funko> findByName(String name) {
         logger.debug("Obteniendo todos los Funkos ordenados por nombre");
         return funkoRepository.findByName(name)
-                .thenComposeAsync(list -> {
+                .collectList()
+                .flatMapMany(list -> {
                     if (list.isEmpty()) {
-                        CompletableFuture<List<Funko>> future = new CompletableFuture<>();
-                        future.completeExceptionally(new FunkoNotFoundException("No se encontraron Funkos con el nombre: " + name));
-                        return future;
+                        return Flux.error(new FunkoNotFoundException("No se encontraron Funkos con el nombre: " + name));
                     } else {
-                        return CompletableFuture.completedFuture(list);
+                        return Flux.fromIterable(list);
                     }
                 });
     }
@@ -96,12 +101,11 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @param path     Ruta del directorio donde se guardará el backup
      * @param fileName Nombre del archivo del backup
      * @param data     Datos a guardar
-     * @throws SQLException       Si hay un error en la base de datos
-     * @throws DirectoryException El directorio no existe
+     * @throws SQLException Si hay un error en la base de datos
      */
     @Override
-    public CompletableFuture<Void> exportData(String path, String fileName, List<Funko> data) throws SQLException {
-        return findAll().thenComposeAsync(s -> backupService.exportData(path, fileName, s));
+    public Mono<Void> exportData(String path, String fileName, List<Funko> data) throws SQLException {
+        return findAll().collectList().flatMap(s -> backupService.exportData(path, fileName, s));
     }
 
     /**
@@ -112,7 +116,7 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return Datos importados
      */
     @Override
-    public CompletableFuture<List<Funko>> importData(String path, String fileName) {
+    public Flux<Funko> importData(String path, String fileName) {
         return backupService.importData(path, fileName);
     }
 
@@ -123,18 +127,13 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return Optional del elemento encontrado
      */
     @Override
-    public CompletableFuture<Optional<Funko>> findById(String id) throws SQLException {
+    public Mono<Funko> findById(String id) throws SQLException {
         logger.debug("Obteniendo Funko por id");
-        Funko funko = cache.get(id);
-        if (funko != null) {
-            logger.debug("Funko encontrado en caché");
-            return CompletableFuture.supplyAsync(() -> Optional.of(funko));
-        }
-        logger.debug("Funko no encontrado en caché, buscando en base de datos");
-        return funkoRepository.findById(id).thenApplyAsync(r -> {
-            r.ifPresent(value -> cache.put(id, value));
-            return r;
-        });
+        return cache.get(id)
+                .switchIfEmpty(funkoRepository.findById(id)
+                        .flatMap(funko -> cache.put(funko.getCod().toString(), funko)
+                                .then(Mono.just(funko)))
+                        .switchIfEmpty(Mono.error(new FunkoNotFoundException("Funko con ID " + id + " no encontrado."))));
     }
 
     /**
@@ -144,10 +143,10 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return Optional del elemento guardado
      */
     @Override
-    public CompletableFuture<Optional<Funko>> save(Funko funko) {
+    public Mono<Funko> save(Funko funko) {
         logger.debug("Guardando Funko");
-        cache.put(funko.getCod().toString(), funko);
-        return funkoRepository.save(funko);
+        return funkoRepository.save(funko)
+                .doOnSuccess(saved -> funkoNotification.notify(new Notification<>(Notification.Type.NEW, saved)));
     }
 
     /**
@@ -158,10 +157,14 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return Optional del elemento actualizado
      */
     @Override
-    public CompletableFuture<Optional<Funko>> update(String funkoId, Funko newFunko) throws SQLException, FunkoNotValidException {
+    public Mono<Funko> update(String funkoId, Funko newFunko) {
         logger.debug("Actualizando Funko");
-        cache.put(newFunko.getCod().toString(), newFunko);
-        return funkoRepository.update(funkoId, newFunko);
+        return funkoRepository.findById(funkoId)
+                .switchIfEmpty(Mono.error(new FunkoNotFoundException("Funko con ID " + funkoId + " no encontrado")))
+                .flatMap(existing -> funkoRepository.update(funkoId, newFunko)
+                        .flatMap(updated -> cache.put(funkoId, updated)
+                                .thenReturn(updated)))
+                .doOnSuccess(saved -> funkoNotification.notify(new Notification<>(Notification.Type.UPDATED, saved)));
     }
 
     /**
@@ -171,14 +174,15 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return ¿Borrado?
      */
     @Override
-    public CompletableFuture<Boolean> delete(String id) throws SQLException, FunkoNotRemovedException {
+    public Mono<Funko> delete(String id) throws SQLException, FunkoNotRemovedException {
         logger.debug("Eliminando Funko");
-        return funkoRepository.delete(id).thenApplyAsync(a -> {
-            if (Boolean.TRUE.equals(a)) {
-                cache.remove(id);
-            }
-            return a;
-        });
+        return funkoRepository.findById(id)
+                .switchIfEmpty(Mono.error(new FunkoNotFoundException("Funko con ID " + id + " no encontrado")))
+                .flatMap(funko -> cache.remove(funko.getCod().toString())
+                        .then(funkoRepository.delete(funko.getCod().toString()))
+                        .thenReturn(funko))
+                .onErrorResume(ex -> Mono.error(new FunkoNotRemovedException("Funko con ID " + id + " no eiminado")))
+                .doOnSuccess(saved -> funkoNotification.notify(new Notification<>(Notification.Type.DELETED, saved)));
     }
 
     /**

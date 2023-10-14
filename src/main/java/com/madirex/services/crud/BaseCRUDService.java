@@ -4,6 +4,8 @@ import com.madirex.exceptions.FunkoNotFoundException;
 import com.madirex.exceptions.FunkoNotRemovedException;
 import com.madirex.exceptions.FunkoNotSavedException;
 import com.madirex.exceptions.FunkoNotValidException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -14,13 +16,13 @@ import java.util.concurrent.CompletableFuture;
  * Interfaz que define las operaciones CRUD de BaseCRUDService
  */
 public interface BaseCRUDService<I> {
-    CompletableFuture<List<I>> findAll() throws SQLException;
+    Flux<I> findAll() throws SQLException;
 
-    CompletableFuture<Optional<I>> findById(String id) throws SQLException, FunkoNotFoundException;
+    Mono<I> findById(String id) throws SQLException, FunkoNotFoundException;
 
-    CompletableFuture<Optional<I>> save(I item) throws SQLException, FunkoNotSavedException;
+    Mono<I> save(I item) throws SQLException, FunkoNotSavedException;
 
-    CompletableFuture<Optional<I>> update(String id, I newI) throws SQLException, FunkoNotValidException;
+    Mono<I> update(String id, I newI) throws SQLException, FunkoNotValidException;
 
-    CompletableFuture<Boolean> delete(String id) throws SQLException, FunkoNotRemovedException;
+    Mono<I> delete(String id) throws SQLException, FunkoNotRemovedException;
 }
