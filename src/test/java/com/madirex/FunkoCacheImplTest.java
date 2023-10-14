@@ -20,7 +20,7 @@ public class FunkoCacheImplTest {
      */
     @BeforeEach
     public void setUp() {
-        cache = new FunkoCacheImpl(10, secondsToClear);
+        cache = new FunkoCacheImpl(15, secondsToClear);
     }
 
     /**
@@ -29,8 +29,8 @@ public class FunkoCacheImplTest {
     @Test
     public void testPutAndGet() {
         Funko funko = Funko.builder().build();
-        cache.put("1", funko);
-        assertEquals(funko, cache.get("1"));
+        cache.put("1", funko).block();
+        assertEquals(funko, cache.get("1").block());
     }
 
     /**
@@ -39,9 +39,9 @@ public class FunkoCacheImplTest {
     @Test
     public void testRemove() {
         Funko funko = Funko.builder().build();
-        cache.put("2", funko);
-        cache.remove("2");
-        assertNull(cache.get("2"));
+        cache.put("2", funko).block();
+        cache.remove("2").block();
+        assertNull(cache.get("2").block());
     }
 
     /**
@@ -56,14 +56,14 @@ public class FunkoCacheImplTest {
     /**
      * Test clear
      *
-     * @throws InterruptedException si hay un error en el hilo
+     * @throws InterruptedException si hay un error de interrupción
      */
     @Test
     public void testClear() throws InterruptedException {
         Funko funko = Funko.builder().build();
-        cache.put("1", funko);
+        cache.put("1", funko).block();
         Thread.sleep(secondsToClear * 1000);
         cache.clear();
-        assertNull(cache.get("1"));
+        assertNull(cache.get("1").block());
     }
 }
