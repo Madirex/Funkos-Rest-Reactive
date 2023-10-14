@@ -62,7 +62,6 @@ public class CsvManager {
                                 .releaseDate(LocalDate.parse(values[4]))
                                 .build();
                     });
-            result.subscribe();
             return result;
         } catch (IOException e) {
             throw new ReadCSVFailException(e.getMessage());

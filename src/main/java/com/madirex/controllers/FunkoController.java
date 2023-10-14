@@ -147,7 +147,6 @@ public class FunkoController implements BaseController<Funko, UUID> {
                 .flatMap(dataList -> {
                     try {
                         var exp = funkoService.exportData(url, fileName, dataList);
-                        exp.subscribe();
                         return exp.onErrorResume(e -> {
                             logger.error("Error al exportar los datos: ", e);
                             return Mono.empty();
@@ -167,7 +166,6 @@ public class FunkoController implements BaseController<Funko, UUID> {
      */
     public Flux<Funko> importData(String url, String fileName) {
         var fl = funkoService.importData(url, fileName);
-        fl.subscribe();
         return fl;
     }
 

@@ -129,10 +129,9 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      */
     @Override
     public Mono<Funko> findById(UUID id) {
-        logger.debug("Obteniendo Funko por id");
-        return cache.get(String.valueOf(id))
+        return cache.get(id.toString())
                 .switchIfEmpty(funkoRepository.findById(id)
-                        .flatMap(funko -> cache.put(funko.getCod().toString(), funko)
+                        .flatMap(funko -> cache.put(id.toString(), funko)
                                 .then(Mono.just(funko)))
                         .switchIfEmpty(Mono.error(new FunkoNotFoundException("Funko con ID " + id + " no encontrado."))));
     }

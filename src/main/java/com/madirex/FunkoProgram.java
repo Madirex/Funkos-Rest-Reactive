@@ -1,7 +1,10 @@
 package com.madirex;
 
 import com.madirex.controllers.FunkoController;
-import com.madirex.exceptions.*;
+import com.madirex.exceptions.FunkoNotFoundException;
+import com.madirex.exceptions.FunkoNotRemovedException;
+import com.madirex.exceptions.FunkoNotSavedException;
+import com.madirex.exceptions.FunkoNotValidException;
 import com.madirex.models.funko.Funko;
 import com.madirex.models.funko.Model;
 import com.madirex.repositories.funko.FunkoRepositoryImpl;
@@ -14,7 +17,6 @@ import com.madirex.services.io.CsvManager;
 import com.madirex.services.notifications.FunkoNotificationImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -23,6 +25,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -62,35 +65,16 @@ public class FunkoProgram {
      */
     public void init() {
         logger.info("Programa de Funkos iniciado.");
-
         var loadAndUploadFunkos = loadFunkosFileAndInsertToDatabase("data" + File.separator + "funkos.csv");
         loadAndUploadFunkos.block();
-
         Mono<Void> serviceExceptionMono = callAllServiceExceptionMethods();
-        serviceExceptionMono.subscribe();
-
         Mono<Void> serviceMono = callAllServiceMethods();
-        serviceMono.subscribe();
-
         Mono<Void> queriesMono = databaseQueries();
-        queriesMono.subscribe();
-
         Mono<Void> allOperationsMono = Mono.when(loadAndUploadFunkos, serviceExceptionMono, serviceMono, queriesMono);
-
         allOperationsMono.doFinally(signalType -> {
             controller.shutdown();
             logger.info("Programa de Funkos finalizado.");
         }).subscribe();
-    }
-
-    /**
-     * Bloquea el programa hasta que se complete la operación
-     *
-     * @param disposable Disposable
-     */
-    private void block(Disposable disposable) {
-        while (!disposable.isDisposed()) {
-        }
     }
 
     /**
@@ -154,7 +138,10 @@ public class FunkoProgram {
      * @return Devuelve los datos
      */
     private Mono<Void> loadBackupAndPrint(String rootFolderName) {
-        return controller.importData(System.getProperty("user.dir") + File.separator + rootFolderName, "backup.json")
+        var imported = controller.importData(System.getProperty("user.dir") + File.separator +
+                rootFolderName, "backup.json");
+        imported.then().block();
+        return imported
                 .doOnNext(funko -> {
                     logger.info("🟢 Copia de seguridad...");
                     logger.info(funko.toString());
@@ -168,13 +155,13 @@ public class FunkoProgram {
      * @return Devuelve los datos
      */
     private Mono<Void> databaseQueries() {
-        var q1 = printExpensiveFunko().then();
-        var q2 = printAvgPriceOfFunkos().then();
-        var q3 = printFunkosGroupedByModels().then();
-        var q4 = printNumberOfFunkosByModels().then();
-        var q5 = printFunkosReleasedIn(2023).then();
-        var q6 = printNumberOfFunkosOfName("Stitch").then();
-        var q7 = printListOfFunkosOfName("Stitch").then();
+        var q1 = printExpensiveFunko();
+        var q2 = printAvgPriceOfFunkos();
+        var q3 = printFunkosGroupedByModels();
+        var q4 = printNumberOfFunkosByModels();
+        var q5 = printFunkosReleasedIn(2023);
+        var q6 = printNumberOfFunkosOfName("Stitch");
+        var q7 = printListOfFunkosOfName("Stitch");
         return Mono.when(q1, q2, q3, q4, q5, q6, q7);
     }
 
@@ -239,29 +226,29 @@ public class FunkoProgram {
      * @param year Año
      * @return Devuelve los datos
      */
-    private Flux<Object> printFunkosReleasedIn(int year) {
-        try {
-            return controller.findAll()
-                    .flatMap(funko -> {
-                        if (funko.getReleaseDate().getYear() == year) {
-                            logger.info("🔵 Funko lanzado en el año " + year + ": " + funko.toString());
-                        }
-                        return Mono.empty();
-                    })
-                    .onErrorResume(e -> {
+    private Flux<Funko> printFunkosReleasedIn(int year) {
+        return Flux.defer(() -> {
+                    try {
+                        return controller.findAll();
+                    } catch (SQLException e) {
+                        String str = "ERROR SQL: " + e;
+                        logger.error(str);
+                        return Flux.empty();
+                    } catch (FunkoNotFoundException e) {
                         String str = "Funkos no encontrados: " + e;
                         logger.error(str);
-                        return Mono.empty();
-                    });
-        } catch (SQLException e) {
-            String str = "ERROR SQL: " + e;
-            logger.error(str);
-            return Flux.empty();
-        } catch (FunkoNotFoundException e) {
-            String str = "Funkos no encontrados: " + e;
-            logger.error(str);
-            return Flux.empty();
-        }
+                        return Flux.empty();
+                    }
+                })
+                .filter(funko -> funko.getReleaseDate().getYear() == year)
+                .doOnNext(filteredFunko -> {
+                    logger.info("🔵 Funko lanzado en el año " + year + ": " + filteredFunko.toString());
+                })
+                .onErrorResume(e -> {
+                    String str = "Funkos no encontrados: " + e;
+                    logger.error(str);
+                    return Mono.empty();
+                });
     }
 
 
@@ -548,7 +535,9 @@ public class FunkoProgram {
      */
     private Mono<Object> doBackupAndPrint(String rootFolderName) {
         try {
-            return controller.exportData(System.getProperty("user.dir") + File.separator + rootFolderName, "backup.json")
+            var backup = controller.exportData(System.getProperty("user.dir") + File.separator + rootFolderName, "backup.json");
+            backup.block();
+            return backup
                     .then(Mono.fromRunnable(() -> {
                         logger.info("🟢 Copia de seguridad...");
                         logger.info("Copia de seguridad realizada.");
@@ -589,22 +578,23 @@ public class FunkoProgram {
      * @param isCorrect Si es un caso correcto
      * @return Datos
      */
-    private Mono<Object> printSave(Funko funko, boolean isCorrect) {
+    private Mono<Funko> printSave(Funko funko, boolean isCorrect) {
         try {
             return controller.save(funko)
-                    .flatMap(savedFunko -> {
+                    .doOnEach(signal -> {
                         if (isCorrect) {
                             logger.info("🟢 Probando caso correcto de Save...");
                         } else {
                             logger.info("🔴 Probando caso incorrecto de Save...");
                         }
+
                         logger.info("\nSave:");
-                        if (savedFunko != null) {
-                            logger.info(savedFunko.toString());
+
+                        if (signal.hasValue()) {
+                            logger.info(signal.get().toString());
                         } else {
                             logger.info("No se ha guardado el Funko.");
                         }
-                        return Mono.empty();
                     })
                     .onErrorResume(e -> {
                         if (e instanceof FunkoNotSavedException || e instanceof FunkoNotValidException) {
@@ -636,18 +626,21 @@ public class FunkoProgram {
      * @param isCorrect Si es un caso correcto
      * @return Datos
      */
-    private Mono<Object> printFindById(UUID id, boolean isCorrect) {
+    private Mono<Funko> printFindById(UUID id, boolean isCorrect) {
         try {
             return controller.findById(id)
-                    .flatMap(foundFunko -> {
+                    .doOnEach(signal -> {
                         if (isCorrect) {
                             logger.info("🟢 Probando caso correcto de FindById...");
                         } else {
                             logger.info("🔴 Probando caso incorrecto de FindById...");
                         }
                         logger.info("\nFind by Id:");
-                        logger.info(foundFunko.toString()); // Asumiendo que foundFunko es un Funko
-                        return Mono.empty();
+                        if (signal.hasValue()) {
+                            logger.info(signal.get().toString());
+                        } else {
+                            logger.info("No se encontró un Funko con el ID especificado.");
+                        }
                     })
                     .onErrorResume(e -> {
                         String strError = "No se ha encontrado el Funko con id " + id + " -> " + e.getMessage();
@@ -673,29 +666,32 @@ public class FunkoProgram {
      * @param isCorrect Si es un caso correcto
      * @return Datos
      */
-    private Mono<Object> printFindByName(String name, boolean isCorrect) {
+    private Flux<Funko> printFindByName(String name, boolean isCorrect) {
         try {
             return controller.findByName(name)
-                    .collectList()
-                    .flatMap(foundFunkos -> {
+                    .doOnEach(foundFunkosSignal -> {
                         if (isCorrect) {
                             logger.info("🟢 Probando caso correcto de FindByName...");
                         } else {
                             logger.info("🔴 Probando caso incorrecto de FindByName...");
                         }
-                        logger.info("\nFind by Name:");
-                        foundFunkos.forEach(funko -> logger.info(funko.toString()));
-                        return Mono.empty();
+                        if (foundFunkosSignal.hasValue()) {
+                            logger.info("\nFind by Name:");
+                            logger.info(foundFunkosSignal.get().toString());
+                        } else if (foundFunkosSignal.hasError()) {
+                            Throwable error = foundFunkosSignal.getThrowable();
+                            logger.error("Error al buscar Funkos por nombre: " + error.getMessage());
+                        }
                     })
                     .onErrorResume(e -> {
                         String str = "Funkos no encontrados: " + e;
                         logger.error(str);
-                        return Mono.empty();
+                        return Flux.empty();
                     });
         } catch (FunkoNotFoundException e) {
             String strError = "No se ha encontrado el Funko: " + e.getMessage();
             logger.error(strError);
-            return Mono.empty();
+            return Flux.empty();
         }
     }
 
@@ -705,29 +701,25 @@ public class FunkoProgram {
      *
      * @return Datos
      */
-    private Mono<Object> printFindAll() {
+    private Flux<Funko> printFindAll() {
         try {
+            logger.info("🟢 Probando caso correcto de FindAll...");
+            logger.info("\nFind All:");
             return controller.findAll()
-                    .collectList()
-                    .flatMap(foundFunkos -> {
-                        logger.info("🟢 Probando caso correcto de FindAll...");
-                        logger.info("\nFind All:");
-                        foundFunkos.forEach(funko -> logger.info(funko.toString()));
-                        return Mono.empty();
-                    })
+                    .doOnEach(foundFunko -> logger.info(foundFunko.toString()))
                     .onErrorResume(e -> {
                         String strError = "No se han encontrado Funkos: " + e;
                         logger.error(strError);
-                        return Mono.empty();
+                        return Flux.empty();
                     });
         } catch (SQLException e) {
             String strError = "Error SQL: " + e.getMessage();
             logger.error(strError);
-            return Mono.empty();
+            return Flux.empty();
         } catch (FunkoNotFoundException e) {
             String strError = "No se ha encontrado el Funko: " + e.getMessage();
             logger.error(strError);
-            return Mono.empty();
+            return Flux.empty();
         }
     }
 
@@ -740,34 +732,20 @@ public class FunkoProgram {
     public Mono<Void> loadFunkosFileAndInsertToDatabase(String path) {
         CsvManager csvManager = CsvManager.getInstance();
 
-        try {
-            return csvManager.fileToFunkoList(path)
-                    .flatMap(funko -> {
-                        try {
-                            return controller.save(funko)
-                                    .onErrorResume(e -> {
-                                        logger.error("Error al insertar el Funko en la base de datos: " + e.getMessage());
-                                        return Mono.empty();
-                                    });
-                        } catch (SQLException e) {
-                            logger.error("Error SQL: " + e.getMessage());
-                            return Mono.empty();
-                        } catch (FunkoNotSavedException e) {
-                            logger.error("Funko no guardado: " + e.getMessage());
-                            return Mono.empty();
-                        } catch (FunkoNotValidException e) {
-                            logger.error("Funko no válido: " + e.getMessage());
-                            return Mono.empty();
-                        }
-                    })
-                    .then()
-                    .onErrorResume(e -> {
-                        logger.error("Error al insertar los datos en la base de datos: " + e.getMessage());
+        return Mono.fromCallable(() -> {
+            List<Funko> funkos = csvManager.fileToFunkoList(path).collectList().block();
+            funkos.forEach(funko -> {
+                try {
+                    controller.save(funko).onErrorResume(e -> {
+                        logger.error("Error al insertar el Funko en la base de datos: " + e.getMessage());
                         return Mono.empty();
-                    });
-        } catch (ReadCSVFailException e) {
-            throw new RuntimeException(e); //TODO: DO
-        }
+                    }).block();
+                } catch (SQLException | FunkoNotSavedException | FunkoNotValidException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            return null;
+        });
     }
 
 }
