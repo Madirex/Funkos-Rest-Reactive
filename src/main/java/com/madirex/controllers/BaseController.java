@@ -12,16 +12,16 @@ import java.sql.SQLException;
  *
  * @param <T> Entity
  */
-public interface BaseController<T> {
+public interface BaseController<T, J> {
     Flux<T> findAll() throws SQLException, FunkoNotFoundException;
 
-    Mono<T> findById(String id) throws SQLException, FunkoNotFoundException;
+    Mono<T> findById(J id) throws SQLException, FunkoNotFoundException;
 
     Flux<T> findByName(String name) throws SQLException, FunkoNotFoundException;
 
     Mono<T> save(T entity) throws SQLException, FunkoException;
 
-    Mono<T> update(String id, T entity) throws SQLException, FunkoException;
+    Mono<T> update(J id, T entity) throws SQLException, FunkoException;
 
-    Mono<T> delete(String id) throws SQLException, FunkoException;
+    Mono<T> delete(J id) throws SQLException, FunkoException;
 }

@@ -68,7 +68,14 @@ public class FunkoCacheImpl implements FunkoCache {
     public Mono<Funko> get(String key) {
         String str = "Obteniendo Funko de caché con ID: " + key;
         logger.debug(str);
-        return Mono.fromRunnable(() -> cache.get(key));
+        return Mono.defer(() -> {
+            Funko funko = cache.get(key);
+            if (funko != null) {
+                return Mono.just(funko);
+            } else {
+                return Mono.empty();
+            }
+        });
     }
 
     /**

@@ -12,14 +12,14 @@ import java.sql.SQLException;
 /**
  * Interfaz que define las operaciones CRUD de BaseCRUDService
  */
-public interface BaseCRUDService<I> {
+public interface BaseCRUDService<I, J> {
     Flux<I> findAll() throws SQLException;
 
-    Mono<I> findById(String id) throws SQLException, FunkoNotFoundException;
+    Mono<I> findById(J id) throws SQLException, FunkoNotFoundException;
 
     Mono<I> save(I item) throws SQLException, FunkoNotSavedException;
 
-    Mono<I> update(String id, I newI) throws SQLException, FunkoNotValidException;
+    Mono<I> update(J id, I newI) throws SQLException, FunkoNotValidException;
 
-    Mono<I> delete(String id) throws SQLException, FunkoNotRemovedException;
+    Mono<I> delete(J id) throws SQLException, FunkoNotRemovedException;
 }

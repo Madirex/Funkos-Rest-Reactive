@@ -7,11 +7,12 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.sql.SQLException;
+import java.util.UUID;
 
 /**
  * Interfaz que define las operaciones CRUD de FunkoService
  */
-public interface FunkoService<T> extends BaseCRUDService<Funko> {
+public interface FunkoService<T> extends BaseCRUDService<Funko, UUID> {
 
     Flux<Funko> findByName(String name) throws SQLException, FunkoNotFoundException;
 

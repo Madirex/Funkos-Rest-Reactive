@@ -14,11 +14,12 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.UUID;
 
 /**
  * Controlador de Funko
  */
-public class FunkoController implements BaseController<Funko> {
+public class FunkoController implements BaseController<Funko, UUID> {
     private static FunkoController funkoControllerInstance;
     private final Logger logger = LoggerFactory.getLogger(FunkoController.class);
 
@@ -66,7 +67,7 @@ public class FunkoController implements BaseController<Funko> {
      * @throws SQLException           si hay un error en la base de datos
      * @throws FunkoNotFoundException si no se encuentra el Funko
      */
-    public Mono<Funko> findById(String id) throws SQLException, FunkoNotFoundException {
+    public Mono<Funko> findById(UUID id) throws SQLException, FunkoNotFoundException {
         String msg = "FindById " + id;
         logger.debug(msg);
         return funkoService.findById(id);
@@ -111,7 +112,7 @@ public class FunkoController implements BaseController<Funko> {
      * @throws FunkoNotValidException si el Funko no es válido
      * @throws SQLException           si hay un error en la base de datos
      */
-    public Mono<Funko> update(String id, Funko funko) throws FunkoNotValidException, SQLException {
+    public Mono<Funko> update(UUID id, Funko funko) throws FunkoNotValidException, SQLException {
         String msg = "Update " + funko;
         logger.debug(msg);
         FunkoValidator.validate(funko);
@@ -126,7 +127,7 @@ public class FunkoController implements BaseController<Funko> {
      * @throws SQLException             si hay un error en la base de datos
      * @throws FunkoNotRemovedException si no se elimina el Funko
      */
-    public Mono<Funko> delete(String id) throws SQLException, FunkoNotRemovedException {
+    public Mono<Funko> delete(UUID id) throws SQLException, FunkoNotRemovedException {
         String msg = "Delete " + id;
         logger.debug(msg);
         return funkoService.delete(id);

@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -62,9 +63,9 @@ public class FunkoRepositoryImpl implements FunkoRepository {
                 connection -> Flux.from(connection.createStatement(sql).execute())
                         .flatMap(result -> result.map((row, rowMetadata) ->
                                 {
-                                    Double price = row.get("precio", Double.class);
+                                    Double price = row.get("precio", BigDecimal.class).doubleValue();
                                     return Funko.builder()
-                                            .cod(UUID.fromString(Objects.requireNonNull(row.get("cod", String.class))))
+                                            .cod(UUID.fromString(Objects.requireNonNull(row.get("cod", UUID.class)).toString()))
                                             .myId(row.get("myId", Long.class))
                                             .name(row.get("nombre", String.class))
                                             .model(Model.valueOf(row.get("modelo", String.class)))
@@ -85,7 +86,7 @@ public class FunkoRepositoryImpl implements FunkoRepository {
      * @return Elemento encontrado
      */
     @Override
-    public Mono<Funko> findById(String id) {
+    public Mono<Funko> findById(UUID id) {
         var sql = "SELECT * FROM funko WHERE cod = ?";
         return Mono.usingWhen(
                 connectionFactory.create(),
@@ -94,9 +95,9 @@ public class FunkoRepositoryImpl implements FunkoRepository {
                         .execute()
                 ).flatMap(result -> Mono.from(result.map((row, rowMetadata) ->
                         {
-                            Double price = row.get("precio", Double.class);
+                            Double price = row.get("precio", BigDecimal.class).doubleValue();
                             return Funko.builder()
-                                    .cod(UUID.fromString(Objects.requireNonNull(row.get("cod", String.class))))
+                                    .cod(Objects.requireNonNull(row.get("cod", UUID.class)))
                                     .myId(row.get("myId", Long.class))
                                     .name(row.get("nombre", String.class))
                                     .model(Model.valueOf(row.get("modelo", String.class)))
@@ -124,7 +125,7 @@ public class FunkoRepositoryImpl implements FunkoRepository {
         return Mono.usingWhen(
                 connectionFactory.create(),
                 connection -> Mono.from(connection.createStatement(sql)
-                        .bind(0, entity.getCod().toString())
+                        .bind(0, entity.getCod())
                         .bind(1, idGenerator.newId())
                         .bind(2, entity.getName())
                         .bind(3, entity.getModel().toString())
@@ -145,7 +146,7 @@ public class FunkoRepositoryImpl implements FunkoRepository {
      * @return ¿Borrado?
      */
     @Override
-    public Mono<Boolean> delete(String id) {
+    public Mono<Boolean> delete(UUID id) {
         var sql = "DELETE FROM funko WHERE cod= ?";
         return Mono.usingWhen(
                 connectionFactory.create(),
@@ -166,7 +167,7 @@ public class FunkoRepositoryImpl implements FunkoRepository {
      * @return Elemento actualizado
      */
     @Override
-    public Mono<Funko> update(String id, Funko entity) {
+    public Mono<Funko> update(UUID id, Funko entity) {
         var sql = "UPDATE funko SET myId = ?, nombre = ?, modelo = ?, precio = ?, fecha_lanzamiento = ?, " +
                 "updated_at = ? WHERE cod = ?";
 

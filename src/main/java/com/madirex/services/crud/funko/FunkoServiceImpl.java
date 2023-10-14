@@ -15,6 +15,7 @@ import reactor.core.publisher.Mono;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Implementación de la interfaz FunkoService
@@ -127,9 +128,9 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return Elemento encontrado
      */
     @Override
-    public Mono<Funko> findById(String id) throws SQLException {
+    public Mono<Funko> findById(UUID id) {
         logger.debug("Obteniendo Funko por id");
-        return cache.get(id)
+        return cache.get(String.valueOf(id))
                 .switchIfEmpty(funkoRepository.findById(id)
                         .flatMap(funko -> cache.put(funko.getCod().toString(), funko)
                                 .then(Mono.just(funko)))
@@ -157,12 +158,12 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return Elemento actualizado
      */
     @Override
-    public Mono<Funko> update(String funkoId, Funko newFunko) {
+    public Mono<Funko> update(UUID funkoId, Funko newFunko) {
         logger.debug("Actualizando Funko");
         return funkoRepository.findById(funkoId)
                 .switchIfEmpty(Mono.error(new FunkoNotFoundException("Funko con ID " + funkoId + " no encontrado")))
                 .flatMap(existing -> funkoRepository.update(funkoId, newFunko)
-                        .flatMap(updated -> cache.put(funkoId, updated)
+                        .flatMap(updated -> cache.put(String.valueOf(funkoId), updated)
                                 .thenReturn(updated)))
                 .doOnSuccess(saved -> funkoNotification.notify(new Notification<>(Notification.Type.UPDATED, saved)));
     }
@@ -174,12 +175,12 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * @return ¿Borrado?
      */
     @Override
-    public Mono<Funko> delete(String id) throws SQLException, FunkoNotRemovedException {
+    public Mono<Funko> delete(UUID id) {
         logger.debug("Eliminando Funko");
         return funkoRepository.findById(id)
                 .switchIfEmpty(Mono.error(new FunkoNotFoundException("Funko con ID " + id + " no encontrado")))
                 .flatMap(funko -> cache.remove(funko.getCod().toString())
-                        .then(funkoRepository.delete(funko.getCod().toString()))
+                        .then(funkoRepository.delete(funko.getCod()))
                         .thenReturn(funko))
                 .onErrorResume(ex -> Mono.error(new FunkoNotRemovedException("Funko con ID " + id + " no eiminado")))
                 .doOnSuccess(saved -> funkoNotification.notify(new Notification<>(Notification.Type.DELETED, saved)));
