@@ -4,18 +4,16 @@ import com.madirex.exceptions.FunkoNotFoundException;
 import com.madirex.exceptions.FunkoNotRemovedException;
 import com.madirex.exceptions.FunkoNotSavedException;
 import com.madirex.exceptions.FunkoNotValidException;
-import com.madirex.models.Funko;
+import com.madirex.models.funko.Funko;
 import com.madirex.services.crud.funko.FunkoServiceImpl;
 import com.madirex.validators.FunkoValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Controlador de Funko
@@ -55,7 +53,7 @@ public class FunkoController implements BaseController<Funko> {
      * @throws SQLException           si hay un error en la base de datos
      * @throws FunkoNotFoundException si no se encuentran Funkos
      */
-    public CompletableFuture<List<Funko>> findAll() throws SQLException, FunkoNotFoundException {
+    public Flux<Funko> findAll() throws SQLException, FunkoNotFoundException {
         logger.debug("FindAll");
         return funkoService.findAll();
     }
@@ -68,7 +66,7 @@ public class FunkoController implements BaseController<Funko> {
      * @throws SQLException           si hay un error en la base de datos
      * @throws FunkoNotFoundException si no se encuentra el Funko
      */
-    public CompletableFuture<Optional<Funko>> findById(String id) throws SQLException, FunkoNotFoundException {
+    public Mono<Funko> findById(String id) throws SQLException, FunkoNotFoundException {
         String msg = "FindById " + id;
         logger.debug(msg);
         return funkoService.findById(id);
@@ -82,7 +80,7 @@ public class FunkoController implements BaseController<Funko> {
      * @throws SQLException           si hay un error en la base de datos
      * @throws FunkoNotFoundException si no se encuentra el Funko
      */
-    public CompletableFuture<List<Funko>> findByName(String name) throws FunkoNotFoundException {
+    public Flux<Funko> findByName(String name) throws FunkoNotFoundException {
         String msg = "FindByName " + name;
         logger.debug(msg);
         return funkoService.findByName(name);
@@ -97,7 +95,7 @@ public class FunkoController implements BaseController<Funko> {
      * @throws FunkoNotSavedException si no se guarda el Funko
      * @throws FunkoNotValidException si el Funko no es válido
      */
-    public CompletableFuture<Optional<Funko>> save(Funko funko) throws SQLException, FunkoNotSavedException, FunkoNotValidException {
+    public Mono<Funko> save(Funko funko) throws SQLException, FunkoNotSavedException, FunkoNotValidException {
         String msg = "Save " + funko;
         logger.debug(msg);
         FunkoValidator.validate(funko);
@@ -113,7 +111,7 @@ public class FunkoController implements BaseController<Funko> {
      * @throws FunkoNotValidException si el Funko no es válido
      * @throws SQLException           si hay un error en la base de datos
      */
-    public CompletableFuture<Optional<Funko>> update(String id, Funko funko) throws FunkoNotValidException, SQLException {
+    public Mono<Funko> update(String id, Funko funko) throws FunkoNotValidException, SQLException {
         String msg = "Update " + funko;
         logger.debug(msg);
         FunkoValidator.validate(funko);
@@ -126,31 +124,12 @@ public class FunkoController implements BaseController<Funko> {
      * @param id id del Funko
      * @return Funko eliminado
      * @throws SQLException             si hay un error en la base de datos
-     * @throws FunkoNotFoundException   si no se encuentra el Funko
      * @throws FunkoNotRemovedException si no se elimina el Funko
      */
-    public CompletableFuture<Optional<Funko>> delete(String id) {
+    public Mono<Funko> delete(String id) throws SQLException, FunkoNotRemovedException {
         String msg = "Delete " + id;
         logger.debug(msg);
-
-        try {
-            return funkoService.findById(id).thenComposeAsync(funko -> {
-                if (funko.isPresent()) {
-                    try {
-                        return funkoService.delete(id).thenApplyAsync(r ->
-                                Boolean.TRUE.equals(r) ? funko : Optional.empty());
-                    } catch (SQLException e) {
-                        logger.error("Error SQL al eliminar el Funko: ", e);
-                    } catch (FunkoNotRemovedException e) {
-                        logger.error("Error al eliminar el Funko: ", e);
-                    }
-                }
-                return CompletableFuture.completedFuture(Optional.empty());
-            });
-        } catch (SQLException e) {
-            logger.error("Error SQL al eliminar el Funko: ", e);
-            return CompletableFuture.completedFuture(Optional.empty());
-        }
+        return funkoService.delete(id);
     }
 
     /**
@@ -161,15 +140,21 @@ public class FunkoController implements BaseController<Funko> {
      * @throws SQLException si hay un error en la base de datos
      * @throws IOException  si hay un error en el archivo
      */
-    public CompletableFuture<Void> exportData(String url, String fileName) throws SQLException, IOException, FunkoNotFoundException {
-        return findAll().thenComposeAsync(data -> {
-            try {
-                return funkoService.exportData(url, fileName, data);
-            } catch (SQLException e) {
-                logger.error("Error al exportar los datos: ", e);
-                return null;
-            }
-        });
+    public Mono<Void> exportData(String url, String fileName) throws SQLException, IOException, FunkoNotFoundException {
+        return findAll()
+                .collectList()
+                .flatMap(dataList -> {
+                    try {
+                        return funkoService.exportData(url, fileName, dataList)
+                                .onErrorResume(e -> {
+                                    logger.error("Error al exportar los datos: ", e);
+                                    return Mono.empty();
+                                });
+                    } catch (SQLException e) {
+                        logger.error("Error al exportar los datos: ", e);
+                        return Mono.empty();
+                    }
+                });
     }
 
     /**
@@ -180,7 +165,7 @@ public class FunkoController implements BaseController<Funko> {
      * @throws SQLException si hay un error en la base de datos
      * @throws IOException  si hay un error en el archivo
      */
-    public CompletableFuture<List<Funko>> importData(String url, String fileName) {
+    public Flux<Funko> importData(String url, String fileName) {
         return funkoService.importData(url, fileName);
     }
 
