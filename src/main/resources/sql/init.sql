@@ -1,4 +1,3 @@
-DROP TABLE funko IF EXISTS;
 CREATE TABLE IF NOT EXISTS funko (
                          id BIGINT PRIMARY KEY AUTO_INCREMENT,
                          MyId BIGINT,
