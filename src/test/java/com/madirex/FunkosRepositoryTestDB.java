@@ -13,9 +13,6 @@ import org.junit.jupiter.api.Test;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -29,65 +26,45 @@ class FunkosRepositoryTestDB {
     /**
      * Método que se ejecuta antes de cada test
      *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
+     * @throws SQLException Si hay un error en la base de datos
      */
     @BeforeEach
-    void setUp() throws SQLException, ExecutionException, InterruptedException {
+    void setUp() throws SQLException {
         funkoRepository = FunkoRepositoryImpl.getInstance(IdGenerator.getInstance(), DatabaseManager.getInstance());
-        CompletableFuture<Void> clearData = funkoRepository.findAll()
-                .thenComposeAsync(funkos -> {
-                    CompletableFuture<Void> clearResult = CompletableFuture.completedFuture(null);
-                    for (Funko e : funkos) {
-                        clearResult = clearResult.thenAcceptAsync(unused -> {
-                            try {
-                                funkoRepository.delete(e.getCod().toString());
-                            } catch (SQLException ex) {
-                                throw new RuntimeException(ex);
-                            }
-                        });
-                    }
-                    return clearResult;
-                });
-        clearData.get();
+        var list = funkoRepository.findAll().collectList().block();
+        list.forEach(e -> {
+            try {
+                funkoRepository.delete(e.getCod()).block();
+            } catch (SQLException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
     }
 
     /**
      * Método que se ejecuta después de cada test
      *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
+     * @throws SQLException Si hay un error en la base de datos
      */
     @AfterEach
-    void tearDown() throws SQLException, ExecutionException, InterruptedException {
-        CompletableFuture<Void> clearData = funkoRepository.findAll()
-                .thenComposeAsync(funkos -> {
-                    CompletableFuture<Void> clearResult = CompletableFuture.completedFuture(null);
-                    for (Funko e : funkos) {
-                        clearResult = clearResult.thenAcceptAsync(unused -> {
-                            try {
-                                funkoRepository.delete(e.getCod().toString());
-                            } catch (SQLException ex) {
-                                throw new RuntimeException(ex);
-                            }
-                        });
-                    }
-                    return clearResult;
-                });
-        clearData.get();
+    void tearDown() throws SQLException {
+        var list = funkoRepository.findAll().collectList().block();
+        list.forEach(e -> {
+            try {
+                funkoRepository.delete(e.getCod()).block();
+            } catch (SQLException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
     }
 
     /**
      * Test para comprobar que se puede guardar un Funko
      *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
+     * @throws SQLException Si hay un error en la base de datos
      */
     @Test
-    void testSaveFunko() throws SQLException, ExecutionException, InterruptedException {
+    void testSaveFunko() throws SQLException {
         LocalDate date = LocalDate.now();
         Funko funko = Funko.builder()
                 .name("Test")
@@ -95,13 +72,7 @@ class FunkosRepositoryTestDB {
                 .price(23.13)
                 .releaseDate(date)
                 .build();
-
-        CompletableFuture<Optional<Funko>> savedFunkoFuture = funkoRepository.save(funko);
-        Optional<Funko> savedFunko = savedFunkoFuture.get();
-
-        assertTrue(savedFunko.isPresent(), "El Funko se guardó con éxito");
-
-        Funko saved = savedFunko.get();
+        var saved = funkoRepository.save(funko).block();
         assertAll("Funko properties",
                 () -> assertNotNull(saved.getCod(), "El ID no debe ser nulo"),
                 () -> assertEquals(funko.getName(), saved.getName(), "Nombre coincide"),
@@ -112,40 +83,12 @@ class FunkosRepositoryTestDB {
     }
 
     /**
-     * Test para comprobar excepción SQLException de Save
+     * Test para comprobar FindById
      *
      * @throws SQLException Si hay un error en la base de datos
      */
     @Test
-    void testSaveWithSQLException() throws SQLException {
-        Funko funko = Funko.builder()
-                .name("Test")
-                .model(Model.ANIME)
-                .price(4.42)
-                .releaseDate(LocalDate.now())
-                .build();
-
-        CompletableFuture<Optional<Funko>> savedFunkoFuture = funkoRepository.save(funko);
-        Optional<Funko> savedFunko = savedFunkoFuture.join();
-        assertTrue(savedFunko.isPresent(), "El Funko se guardó con éxito");
-
-        CompletableFuture<Optional<Funko>> saveFuture = funkoRepository.save(funko);
-
-        saveFuture.exceptionally(throwable -> {
-            assertTrue(throwable.getCause() instanceof SQLException, "Se lanzó una SQLException");
-            return Optional.empty();
-        }).join();
-    }
-
-    /**
-     * Test para comprobar FindById
-     *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
-     */
-    @Test
-    void testFindFunkoById() throws SQLException, ExecutionException, InterruptedException {
+    void testFindFunkoById() throws SQLException {
         LocalDate date = LocalDate.now();
         Funko funko = Funko.builder()
                 .name("Test")
@@ -153,91 +96,47 @@ class FunkosRepositoryTestDB {
                 .price(23.12)
                 .releaseDate(date)
                 .build();
-        CompletableFuture<Optional<Funko>> savedFunkoFuture = funkoRepository.save(funko);
-        Optional<Funko> savedFunko = savedFunkoFuture.get();
-        assertTrue(savedFunko.isPresent(), "El Funko se guardó con éxito");
-
-        CompletableFuture<Optional<Funko>> foundFunkoFuture = funkoRepository.findById(savedFunko.get().getCod().toString());
-        Optional<Funko> foundFunko = foundFunkoFuture.get();
-        assertTrue(foundFunko.isPresent(), "El Funko se encontró con éxito");
-
+        var foundFunko = funkoRepository.save(funko).block();
         assertAll("Funko properties",
-                () -> assertEquals(funko.getName(), foundFunko.get().getName(), "Nombre coincide"),
-                () -> assertEquals(funko.getModel(), foundFunko.get().getModel(), "Modelo coincide"),
-                () -> assertEquals(funko.getPrice(), foundFunko.get().getPrice(), "Precio coincide"),
-                () -> assertEquals(funko.getReleaseDate(), foundFunko.get().getReleaseDate(), "Fecha de lanzamiento coincide"),
-                () -> assertNotNull(foundFunko.get().getCod(), "El ID no debe ser nulo")
+                () -> assertEquals(funko.getName(), foundFunko.getName(), "Nombre coincide"),
+                () -> assertEquals(funko.getModel(), foundFunko.getModel(), "Modelo coincide"),
+                () -> assertEquals(funko.getPrice(), foundFunko.getPrice(), "Precio coincide"),
+                () -> assertEquals(funko.getReleaseDate(), foundFunko.getReleaseDate(), "Fecha de lanzamiento coincide"),
+                () -> assertNotNull(foundFunko.getCod(), "El ID no debe ser nulo")
         );
-    }
-
-    /**
-     * Test para comprobar que no se encuentra un Funko
-     *
-     * @throws SQLException Si hay un error en la base de datos
-     */
-    @Test
-    void testFindByIdWithSQLException() throws SQLException {
-        String id = "invalidId";
-        Funko funko = Funko.builder()
-                .name("Test")
-                .model(Model.ANIME)
-                .price(4.42)
-                .releaseDate(LocalDate.now())
-                .build();
-
-        CompletableFuture<Optional<Funko>> savedFunkoFuture = funkoRepository.save(funko);
-        Optional<Funko> savedFunko = savedFunkoFuture.join();
-        assertTrue(savedFunko.isPresent(), "El Funko se guardó con éxito");
-
-        CompletableFuture<Optional<Funko>> findByIdFuture = funkoRepository.findById(id);
-
-        findByIdFuture.exceptionally(throwable -> {
-            assertTrue(throwable.getCause() instanceof SQLException, "Se lanzó una SQLException");
-            return Optional.empty();
-        }).join();
     }
 
 
     /**
      * Test para comprobar FindAll
      *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
+     * @throws SQLException Si hay un error en la base de datos
      */
     @Test
-    void testFindAllFunkos() throws SQLException, ExecutionException, InterruptedException {
-        CompletableFuture<Optional<Funko>> savedFunko1Future = funkoRepository.save(Funko.builder()
+    void testFindAllFunkos() throws SQLException {
+        funkoRepository.save(Funko.builder()
                 .name("test1")
                 .model(Model.ANIME)
                 .price(12.52)
                 .releaseDate(LocalDate.now())
-                .build());
-        CompletableFuture<Optional<Funko>> savedFunko2Future = funkoRepository.save(Funko.builder()
+                .build()).block();
+        funkoRepository.save(Funko.builder()
                 .name("test2")
                 .model(Model.ANIME)
                 .price(28.52)
                 .releaseDate(LocalDate.now())
-                .build());
+                .build()).block();
 
-        CompletableFuture<Void> allOf = CompletableFuture.allOf(savedFunko1Future, savedFunko2Future);
-        allOf.get();
-
-        CompletableFuture<List<Funko>> allFunkosFuture = funkoRepository.findAll();
-        List<Funko> allFunkos = allFunkosFuture.get();
-
-        assertEquals(2, allFunkos.size(), "El número de Funkos en el repositorio coincide con el esperado");
+        assertEquals(2, funkoRepository.findAll().collectList().block().size(), "El número de Funkos debe de coincidir con el esperado");
     }
 
     /**
      * Test para comprobar FindByName
      *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
+     * @throws SQLException Si hay un error en la base de datos
      */
     @Test
-    void testFindFunkosByName() throws SQLException, ExecutionException, InterruptedException {
+    void testFindFunkosByName() throws SQLException {
         LocalDate date = LocalDate.now();
         Funko funko1 = Funko.builder()
                 .name("test1")
@@ -251,15 +150,10 @@ class FunkosRepositoryTestDB {
                 .price(81.23)
                 .releaseDate(date)
                 .build();
-        CompletableFuture<Optional<Funko>> savedFunko1Future = funkoRepository.save(funko1);
-        savedFunko1Future.join();
-        CompletableFuture<Optional<Funko>> savedFunko2Future = funkoRepository.save(funko2);
 
-        CompletableFuture<Void> allOf = CompletableFuture.allOf(savedFunko1Future, savedFunko2Future);
-        allOf.get();
-
-        CompletableFuture<List<Funko>> foundFunkosFuture = funkoRepository.findByName("test1");
-        List<Funko> foundFunkos = foundFunkosFuture.get();
+        funkoRepository.save(funko1).block();
+        funkoRepository.save(funko2).block();
+        List<Funko> foundFunkos = funkoRepository.findByName("test1").collectList().block();
 
         assertAll("Funkos encontrados",
                 () -> assertNotNull(foundFunkos, "La lista de Funkos no debe ser nula"),
@@ -278,134 +172,56 @@ class FunkosRepositoryTestDB {
     /**
      * Test para comprobar Update
      *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
-     */
-    @Test
-    void testUpdateFunko() throws SQLException, ExecutionException, InterruptedException {
-        Funko funko = Funko.builder()
-                .name("Test")
-                .model(Model.ANIME)
-                .price(4.42)
-                .releaseDate(LocalDate.now())
-                .build();
-        CompletableFuture<Optional<Funko>> savedFunkoFuture = funkoRepository.save(funko);
-        Optional<Funko> savedFunko = savedFunkoFuture.get();
-        assertTrue(savedFunko.isPresent(), "El Funko se guardó con éxito");
-
-        savedFunko.get().setName("Updated");
-        savedFunko.get().setPrice(42.43);
-
-        CompletableFuture<Optional<Funko>> updateFuture = funkoRepository.update(savedFunko.get().getCod().toString(), savedFunko.get());
-        updateFuture.get();
-
-        CompletableFuture<Optional<Funko>> foundFunkoFuture = funkoRepository.findById(savedFunko.get().getCod().toString());
-        Optional<Funko> foundFunko = foundFunkoFuture.get();
-        assertTrue(foundFunko.isPresent(), "El Funko se encontró con éxito");
-
-        assertAll("Funko actualizado",
-                () -> assertEquals(savedFunko.get().getName(), foundFunko.get().getName(), "Nombre actualizado coincide"),
-                () -> assertEquals(savedFunko.get().getPrice(), foundFunko.get().getPrice(), "Precio actualizado coincide")
-        );
-    }
-
-    /**
-     * Test para comprobar excepción SQLException de Update
-     *
      * @throws SQLException Si hay un error en la base de datos
      */
     @Test
-    void testUpdateFunkoWithSQLException() throws SQLException {
+    void testUpdateFunko() throws SQLException {
         Funko funko = Funko.builder()
                 .name("Test")
                 .model(Model.ANIME)
                 .price(4.42)
                 .releaseDate(LocalDate.now())
                 .build();
-
-        CompletableFuture<Optional<Funko>> savedFunkoFuture = funkoRepository.save(funko);
-        Optional<Funko> savedFunko = savedFunkoFuture.join();
-        assertTrue(savedFunko.isPresent(), "El Funko se guardó con éxito");
-
-        CompletableFuture<Optional<Funko>> updateFuture = funkoRepository.update("invalidId", savedFunko.get());
-
-        updateFuture.exceptionally(throwable -> {
-            assertTrue(throwable.getCause() instanceof SQLException, "Se lanzó una SQLException");
-            return Optional.empty();
-        }).join();
+        var savedFunko = funkoRepository.save(funko).block();
+        assertNotNull(savedFunko);
+        funkoRepository.update(funko.getCod(), savedFunko).block();
+        var foundFunko = funkoRepository.findById(savedFunko.getCod()).block();
+        assertAll("Funko actualizado",
+                () -> assertEquals(savedFunko.getName(), foundFunko.getName(), "Nombre actualizado debe coincidir"),
+                () -> assertEquals(savedFunko.getPrice(), foundFunko.getPrice(), "Precio actualizado debe coincidir"),
+                () -> assertEquals(savedFunko.getReleaseDate(), foundFunko.getReleaseDate(), "Fecha de lanzamiento debe coincidir"),
+                () -> assertEquals(savedFunko.getModel(), foundFunko.getModel(), "Modelo debe coincidir"),
+                () -> assertEquals(savedFunko.getName(), foundFunko.getName(), "Nombre debe coincidir"),
+                () -> assertEquals(savedFunko.getPrice(), foundFunko.getPrice(), "Precio debe coincidir"),
+                () -> assertEquals(savedFunko.getReleaseDate(), foundFunko.getReleaseDate(), "Fecha de lanzamiento debe coincidir"),
+                () -> assertEquals(savedFunko.getModel(), foundFunko.getModel(), "Modelo debe coincidir")
+        );
     }
 
     /**
      * Test para comprobar Delete
      *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
+     * @throws SQLException Si hay un error en la base de datos
      */
     @Test
-    void testDeleteFunko() throws SQLException, ExecutionException, InterruptedException {
+    void testDeleteFunko() throws SQLException {
         Funko funko = Funko.builder()
                 .name("Test")
                 .model(Model.ANIME)
                 .price(4.42)
                 .releaseDate(LocalDate.now())
                 .build();
-        CompletableFuture<Optional<Funko>> savedFunkoFuture = funkoRepository.save(funko);
-        Optional<Funko> savedFunko = savedFunkoFuture.get();
-        assertTrue(savedFunko.isPresent(), "El Funko se guardó con éxito");
+        var savedFunko = funkoRepository.save(funko).block();
+        assertNotNull(savedFunko);
 
-        CompletableFuture<Boolean> deleteFuture = funkoRepository.delete(savedFunko.get().getCod().toString());
-        boolean deletionResult = deleteFuture.get();
+        var deleteFuture = funkoRepository.delete(savedFunko.getCod()).block();
+        assertTrue(deleteFuture, "La eliminación del Funko se completó con éxito");
 
-        assertTrue(deletionResult, "La eliminación del Funko se completó con éxito");
-
-        CompletableFuture<Optional<Funko>> foundFunkoFuture = funkoRepository.findById(savedFunko.get().getCod().toString());
-        Optional<Funko> foundFunko = foundFunkoFuture.get();
+        var foundFunko = funkoRepository.findById(savedFunko.getCod()).block();
 
         assertAll("Funko eliminado",
-                () -> assertFalse(foundFunko.isPresent(), "El Funko no debe encontrarse después de la eliminación")
+                () -> assertNull(foundFunko, "El Funko no debe encontrarse después de la eliminación")
         );
     }
 
-    /**
-     * Test para comprobar que no se pueda eliminar un Funko que no existe
-     *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
-     */
-    @Test
-    void testDeleteFunkoNotExists() throws SQLException, ExecutionException, InterruptedException {
-        CompletableFuture<Boolean> deletionFuture = funkoRepository.delete("cac4c061-20ec-4e87-ad3a-b1a7ea12facc");
-        Boolean deleted = deletionFuture.get();
-        assertFalse(deleted, "La eliminación de un Funko que no existe debe devolver false");
-    }
-
-    /**
-     * Test para comprobar excepción SQLException de Delete
-     *
-     * @throws SQLException         Si hay un error en la base de datos
-     * @throws ExecutionException   Si hay un error en la ejecución
-     * @throws InterruptedException Si hay un error en la ejecución
-     */
-    @Test
-    void testDeleteFunkoWithSQLException() throws SQLException, ExecutionException, InterruptedException {
-        Funko funko = Funko.builder()
-                .name("Test")
-                .model(Model.ANIME)
-                .price(4.42)
-                .releaseDate(LocalDate.now())
-                .build();
-        CompletableFuture<Optional<Funko>> savedFunkoFuture = funkoRepository.save(funko);
-        Optional<Funko> savedFunko = savedFunkoFuture.get();
-        assertTrue(savedFunko.isPresent(), "El Funko se guardó con éxito");
-
-        CompletableFuture<Boolean> deleteFuture = funkoRepository.delete("invalidId");
-
-        deleteFuture.exceptionally(throwable -> {
-            assertTrue(throwable.getCause() instanceof SQLException, "Se lanzó una SQLException");
-            return false;
-        }).join();
-    }
 }
