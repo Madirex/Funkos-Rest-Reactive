@@ -146,11 +146,12 @@ public class FunkoController implements BaseController<Funko, UUID> {
                 .collectList()
                 .flatMap(dataList -> {
                     try {
-                        return funkoService.exportData(url, fileName, dataList)
-                                .onErrorResume(e -> {
-                                    logger.error("Error al exportar los datos: ", e);
-                                    return Mono.empty();
-                                });
+                        var exp = funkoService.exportData(url, fileName, dataList);
+                        exp.subscribe();
+                        return exp.onErrorResume(e -> {
+                            logger.error("Error al exportar los datos: ", e);
+                            return Mono.empty();
+                        });
                     } catch (SQLException e) {
                         logger.error("Error al exportar los datos: ", e);
                         return Mono.empty();
@@ -163,11 +164,11 @@ public class FunkoController implements BaseController<Funko, UUID> {
      *
      * @param url      url de la base de datos
      * @param fileName nombre del archivo
-     * @throws SQLException si hay un error en la base de datos
-     * @throws IOException  si hay un error en el archivo
      */
     public Flux<Funko> importData(String url, String fileName) {
-        return funkoService.importData(url, fileName);
+        var fl = funkoService.importData(url, fileName);
+        fl.subscribe();
+        return fl;
     }
 
     /**
