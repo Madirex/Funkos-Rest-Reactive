@@ -1,7 +1,7 @@
 package com.madirex.repositories.funko;
 
-import com.madirex.models.Funko;
-import com.madirex.models.Model;
+import com.madirex.models.funko.Funko;
+import com.madirex.models.funko.Model;
 import com.madirex.services.crud.funko.IdGenerator;
 import com.madirex.services.database.DatabaseManager;
 import io.r2dbc.pool.ConnectionPool;

@@ -1,6 +1,6 @@
 package com.madirex.services.cache;
 
-import com.madirex.models.Funko;
+import com.madirex.models.funko.Funko;
 
 /**
  * Interfaz para la implementación de una caché

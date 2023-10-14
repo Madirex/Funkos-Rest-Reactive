@@ -1,6 +1,6 @@
 package com.madirex;
 
-import com.madirex.models.Funko;
+import com.madirex.models.funko.Funko;
 import com.madirex.services.cache.FunkoCacheImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,7 +1,7 @@
 package com.madirex;
 
-import com.madirex.models.Funko;
-import com.madirex.models.Model;
+import com.madirex.models.funko.Funko;
+import com.madirex.models.funko.Model;
 import com.madirex.repositories.funko.FunkoRepository;
 import com.madirex.repositories.funko.FunkoRepositoryImpl;
 import com.madirex.services.crud.funko.IdGenerator;

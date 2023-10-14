@@ -1,7 +1,7 @@
 package com.madirex.validators;
 
 import com.madirex.exceptions.FunkoNotValidException;
-import com.madirex.models.Funko;
+import com.madirex.models.funko.Funko;
 
 /**
  * Clase FunkoValidator que valida un Funko

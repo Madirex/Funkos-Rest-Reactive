@@ -1,4 +1,4 @@
-package com.madirex.models;
+package com.madirex.models.funko;
 
 import com.madirex.utils.Utils;
 import lombok.Builder;

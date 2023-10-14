@@ -1,6 +1,6 @@
 package com.madirex.repositories.funko;
 
-import com.madirex.models.Funko;
+import com.madirex.models.funko.Funko;
 import com.madirex.repositories.CRUDRepository;
 import reactor.core.publisher.Flux;
 

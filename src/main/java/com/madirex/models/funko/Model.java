@@ -1,4 +1,4 @@
-package com.madirex.models;
+package com.madirex.models.funko;
 
 /**
  * Enumerado de modelos
