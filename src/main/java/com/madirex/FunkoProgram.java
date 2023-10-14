@@ -622,7 +622,7 @@ public class FunkoProgram {
      *
      * @param id        Id del Funko
      * @param isCorrect Si es un caso correcto
-     * @return CompletableFuture
+     * @return Datos
      */
     private Mono<Object> printFindById(String id, boolean isCorrect) {
         try {
@@ -659,7 +659,7 @@ public class FunkoProgram {
      *
      * @param name      Nombre de los Funkos
      * @param isCorrect Si es un caso correcto
-     * @return CompletableFuture
+     * @return Datos
      */
     private Mono<Object> printFindByName(String name, boolean isCorrect) {
         try {
@@ -691,7 +691,7 @@ public class FunkoProgram {
     /**
      * Imprime todos los Funkos
      *
-     * @return CompletableFuture
+     * @return Datos
      */
     private Mono<Object> printFindAll() {
         try {
@@ -723,7 +723,7 @@ public class FunkoProgram {
      * Lee un archivo CSV y lo inserta en la base de datos de manera asíncrona
      *
      * @param path Ruta del archivo CSV
-     * @return CompletableFuture
+     * @return Datos
      */
     public Mono<Void> loadFunkosFileAndInsertToDatabase(String path) {
         CsvManager csvManager = CsvManager.getInstance();
