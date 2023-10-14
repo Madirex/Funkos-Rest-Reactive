@@ -67,7 +67,7 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
     /**
      * Devuelve todos los elementos del repositorio
      *
-     * @return Optional de la lista de elementos
+     * @return Lista de elementos
      */
     @Override
     public Flux<Funko> findAll() {
@@ -124,7 +124,7 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * Devuelve un elemento del repositorio
      *
      * @param id Id del elemento a buscar
-     * @return Optional del elemento encontrado
+     * @return Elemento encontrado
      */
     @Override
     public Mono<Funko> findById(String id) throws SQLException {
@@ -140,7 +140,7 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      * Guarda un elemento en el repositorio
      *
      * @param funko Elemento a guardar
-     * @return Optional del elemento guardado
+     * @return Elemento guardado
      */
     @Override
     public Mono<Funko> save(Funko funko) {
@@ -154,7 +154,7 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
      *
      * @param funkoId  Id del elemento a actualizar
      * @param newFunko Elemento con los nuevos datos
-     * @return Optional del elemento actualizado
+     * @return Elemento actualizado
      */
     @Override
     public Mono<Funko> update(String funkoId, Funko newFunko) {

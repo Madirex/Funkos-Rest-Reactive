@@ -41,7 +41,7 @@ public class CsvManager {
     }
 
     /**
-     * Lee un archivo CSV y lo convierte en un Optional de la lista de Funko
+     * Lee un archivo CSV y lo convierte en lista de Funko
      *
      * @param path Ruta del archivo CSV
      * @return Lista de Funko

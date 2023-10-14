@@ -52,7 +52,7 @@ public class FunkoRepositoryImpl implements FunkoRepository {
     /**
      * Devuelve todos los elementos del repositorio
      *
-     * @return Optional de la lista de elementos
+     * @return Lista de elementos
      */
     @Override
     public Flux<Funko> findAll() {
@@ -82,7 +82,7 @@ public class FunkoRepositoryImpl implements FunkoRepository {
      * Busca un elemento en el repositorio por su id
      *
      * @param id Id del elemento a buscar
-     * @return Optional del elemento encontrado
+     * @return Elemento encontrado
      */
     @Override
     public Mono<Funko> findById(String id) {
@@ -114,7 +114,7 @@ public class FunkoRepositoryImpl implements FunkoRepository {
      * Guarda un elemento en el repositorio
      *
      * @param entity Elemento a guardar
-     * @return Optional del elemento guardado
+     * @return Elemento guardado
      */
     @Override
     public Mono<Funko> save(Funko entity) {
@@ -163,7 +163,7 @@ public class FunkoRepositoryImpl implements FunkoRepository {
      *
      * @param id     Id del elemento a actualizar
      * @param entity Elemento con los nuevos datos
-     * @return Optional del elemento actualizado
+     * @return Elemento actualizado
      */
     @Override
     public Mono<Funko> update(String id, Funko entity) {
