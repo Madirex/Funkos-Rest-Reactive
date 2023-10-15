@@ -184,17 +184,21 @@ class FunkosRepositoryTestDB {
                 .build();
         var savedFunko = funkoRepository.save(funko).block();
         assertNotNull(savedFunko);
+        funko.setName("Test2");
+        funko.setModel(Model.DISNEY);
+        funko.setPrice(23.23);
+        funko.setReleaseDate(LocalDate.now());
         funkoRepository.update(funko.getCod(), savedFunko).block();
         var foundFunko = funkoRepository.findById(savedFunko.getCod()).block();
         assertAll("Funko actualizado",
-                () -> assertEquals(savedFunko.getName(), foundFunko.getName(), "Nombre actualizado debe coincidir"),
-                () -> assertEquals(savedFunko.getPrice(), foundFunko.getPrice(), "Precio actualizado debe coincidir"),
-                () -> assertEquals(savedFunko.getReleaseDate(), foundFunko.getReleaseDate(), "Fecha de lanzamiento debe coincidir"),
-                () -> assertEquals(savedFunko.getModel(), foundFunko.getModel(), "Modelo debe coincidir"),
-                () -> assertEquals(savedFunko.getName(), foundFunko.getName(), "Nombre debe coincidir"),
-                () -> assertEquals(savedFunko.getPrice(), foundFunko.getPrice(), "Precio debe coincidir"),
-                () -> assertEquals(savedFunko.getReleaseDate(), foundFunko.getReleaseDate(), "Fecha de lanzamiento debe coincidir"),
-                () -> assertEquals(savedFunko.getModel(), foundFunko.getModel(), "Modelo debe coincidir")
+                () -> assertEquals(funko.getName(), foundFunko.getName(), "Nombre actualizado debe coincidir"),
+                () -> assertEquals(funko.getPrice(), foundFunko.getPrice(), "Precio actualizado debe coincidir"),
+                () -> assertEquals(funko.getReleaseDate(), foundFunko.getReleaseDate(), "Fecha de lanzamiento debe coincidir"),
+                () -> assertEquals(funko.getModel(), foundFunko.getModel(), "Modelo debe coincidir"),
+                () -> assertEquals(funko.getName(), foundFunko.getName(), "Nombre debe coincidir"),
+                () -> assertEquals(funko.getPrice(), foundFunko.getPrice(), "Precio debe coincidir"),
+                () -> assertEquals(funko.getReleaseDate(), foundFunko.getReleaseDate(), "Fecha de lanzamiento debe coincidir"),
+                () -> assertEquals(funko.getModel(), foundFunko.getModel(), "Modelo debe coincidir")
         );
     }
 
