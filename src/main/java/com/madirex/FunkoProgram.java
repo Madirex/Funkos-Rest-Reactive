@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.Comparator;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -404,57 +403,58 @@ public class FunkoProgram {
      * @return Datos
      */
     private Flux<Object> printDelete(String name, boolean isCorrect) {
-        try {
-            return controller.findByName(name)
-                    .flatMap(funko -> {
-                        if (funko != null) {
-                            var cod = funko.getCod();
-                            try {
-                                return controller.delete(cod)
-                                        .flatMap(deletedFunko -> {
-                                            if (isCorrect) {
-                                                logger.info("🟢 Probando caso correcto de Delete...");
-                                            } else {
-                                                logger.info("🔴 Probando caso incorrecto de Delete...");
-                                            }
-                                            logger.info("\nDelete:");
-                                            if (deletedFunko != null) {
-                                                String str = "Funko eliminado: " + deletedFunko;
-                                                logger.info(str);
-                                            } else {
-                                                logger.info("No se ha eliminado el Funko.");
-                                            }
-                                            return Mono.empty();
-                                        })
-                                        .onErrorResume(ex -> {
-                                            String strError = "No se ha eliminado el Funko con id " + cod.toString() + " -> " + ex;
-                                            logger.error(strError);
-                                            return Mono.empty();
-                                        });
-                            } catch (SQLException e) {
-                                String str = "ERROR SQL: " + e;
-                                logger.error(str);
+        return Flux.defer(() -> {
+            try {
+                return controller.findByName(name)
+                        .flatMap(funko -> {
+                            if (funko != null) {
+                                var cod = funko.getCod();
+                                try {
+                                    return controller.delete(cod)
+                                            .flatMap(deletedFunko -> {
+                                                if (isCorrect) {
+                                                    logger.info("🟢 Probando caso correcto de Delete...");
+                                                } else {
+                                                    logger.info("🔴 Probando caso incorrecto de Delete...");
+                                                }
+                                                logger.info("\nDelete:");
+                                                if (deletedFunko != null) {
+                                                    String str = "Funko eliminado: " + deletedFunko;
+                                                    logger.info(str);
+                                                } else {
+                                                    logger.info("No se ha eliminado el Funko.");
+                                                }
+                                                return Mono.empty();
+                                            })
+                                            .onErrorResume(ex -> {
+                                                String strError = "No se ha eliminado el Funko con id " + cod.toString() + " -> " + ex;
+                                                logger.error(strError);
+                                                return Mono.empty();
+                                            });
+                                } catch (SQLException e) {
+                                    String str = "Error SQL." + e.getMessage();
+                                    logger.info(str);
+                                } catch (FunkoNotRemovedException e) {
+                                    String str = "No se ha eliminado el Funko:" + e.getMessage();
+                                    logger.info(str);
+                                }
                                 return Mono.empty();
-                            } catch (FunkoNotRemovedException e) {
-                                String str = "Funko no eliminado: " + e;
-                                logger.error(str);
+                            } else {
+                                logger.info("No se ha encontrado el Funko.");
                                 return Mono.empty();
                             }
-                        } else {
-                            logger.info("No se ha encontrado el Funko.");
+                        })
+                        .onErrorResume(e -> {
+                            String strError = "No se ha encontrado el Funko con nombre " + name + " -> " + e;
+                            logger.error(strError);
                             return Mono.empty();
-                        }
-                    })
-                    .onErrorResume(e -> {
-                        String strError = "No se ha encontrado el Funko con nombre " + name + " -> " + e;
-                        logger.error(strError);
-                        return Mono.empty();
-                    });
-        } catch (FunkoNotFoundException e) {
-            String str = "Funkos no encontrados: " + e;
-            logger.error(str);
-            return Flux.empty();
-        }
+                        });
+            } catch (FunkoNotFoundException e) {
+                String str = "No se ha encontrado el Funko:" + e.getMessage();
+                logger.info(str);
+                return Mono.empty();
+            }
+        });
     }
 
 
@@ -465,23 +465,22 @@ public class FunkoProgram {
      * @param newName   Nuevo nombre del Funko
      * @param isCorrect Si es un caso correcto
      * @return Datos
-     * @throws SQLException Excepción SQL
      */
     private Flux<Object> printUpdate(String name, String newName, boolean isCorrect) {
-        try {
-            return controller.findByName(name)
-                    .flatMap(funko -> {
-                        if (funko != null) {
-                            try {
-                                return controller.update(funko.getCod(),
-                                                Funko.builder()
-                                                        .name(newName)
-                                                        .model(Model.DISNEY)
-                                                        .price(42.42)
-                                                        .releaseDate(LocalDate.now())
-                                                        .build())
-                                        .map(updatedFunko -> {
-                                            if (updatedFunko != null) {
+        return Flux.defer(() -> {
+            try {
+                return controller.findByName(name)
+                        .flatMap(funko -> {
+                            if (funko != null) {
+                                try {
+                                    return controller.update(funko.getCod(),
+                                                    Funko.builder()
+                                                            .name(newName)
+                                                            .model(Model.DISNEY)
+                                                            .price(42.42)
+                                                            .releaseDate(LocalDate.now())
+                                                            .build())
+                                            .flatMap(updatedFunko -> {
                                                 if (isCorrect) {
                                                     logger.info("🟢 Probando caso correcto de Update...");
                                                 } else {
@@ -489,38 +488,36 @@ public class FunkoProgram {
                                                 }
                                                 logger.info("\nUpdate:");
                                                 logger.info(updatedFunko.toString());
-                                            } else {
-                                                logger.info("No se ha actualizado el Funko.");
-                                            }
-                                            return null;
-                                        })
-                                        .onErrorResume(ex -> {
-                                            String strError = "No se ha actualizado el Funko con nombre " + name + " -> " + ex.getMessage();
-                                            logger.error(strError);
-                                            return null;
-                                        });
-                            } catch (FunkoNotValidException e) {
-                                String str = "El Funko no es válido: " + e;
-                                logger.error(str);
-                            } catch (SQLException e) {
-                                String str = "Fallo SQL: " + e;
-                                logger.error(str);
+                                                return Mono.empty();
+                                            })
+                                            .onErrorResume(ex -> {
+                                                String strError = "No se ha actualizado el Funko con nombre " + name + " -> " + ex.getMessage();
+                                                logger.error(strError);
+                                                return Mono.empty();
+                                            });
+                                } catch (FunkoNotValidException e) {
+                                    String strError = "Funko no válido: " + e;
+                                    logger.error(strError);
+                                } catch (SQLException e) {
+                                    String strError = "Error SQL: " + e;
+                                    logger.error(strError);
+                                }
+                            } else {
+                                logger.info("El Funko no se ha encontrado.");
                             }
-                        } else {
-                            logger.info("El Funko no se ha encontrado.");
-                        }
-                        return Mono.empty();
-                    })
-                    .onErrorResume(e -> {
-                        String strError = "No se ha encontrado el Funko con nombre " + name + " -> " + e;
-                        logger.error(strError);
-                        return Mono.empty();
-                    });
-        } catch (FunkoNotFoundException e) {
-            String str = "Funko no encontrado: " + e;
-            logger.error(str);
-            return Flux.empty();
-        }
+                            return Mono.empty();
+                        })
+                        .onErrorResume(e -> {
+                            String strError = "No se ha encontrado el Funko con nombre " + name + " -> " + e;
+                            logger.error(strError);
+                            return Mono.empty();
+                        });
+            } catch (FunkoNotFoundException e) {
+                String strError = "Funko no encontrado: " + e;
+                logger.error(strError);
+            }
+            return Mono.empty();
+        });
     }
 
 
@@ -576,43 +573,43 @@ public class FunkoProgram {
      * @return Datos
      */
     private Mono<Funko> printSave(Funko funko, boolean isCorrect) {
-        try {
-            return controller.save(funko)
-                    .doOnEach(signal -> {
-                        if (isCorrect) {
-                            logger.info("🟢 Probando caso correcto de Save...");
-                        } else {
-                            logger.info("🔴 Probando caso incorrecto de Save...");
-                        }
+        return Mono.defer(() -> {
+            if (isCorrect) {
+                logger.info("🟢 Probando caso correcto de Save...");
+            } else {
+                logger.info("🔴 Probando caso incorrecto de Save...");
+            }
 
-                        logger.info("\nSave:");
+            logger.info("\nSave:");
 
-                        if (signal.hasValue()) {
-                            logger.info(signal.get().toString());
-                        } else {
-                            logger.info("No se ha guardado el Funko.");
-                        }
-                    })
-                    .onErrorResume(e -> {
-                        if (e instanceof FunkoNotSavedException || e instanceof FunkoNotValidException) {
-                            String strError = "No se ha podido guardar el Funko: " + e;
-                            logger.error(strError);
-                        }
-                        return Mono.empty();
-                    });
-        } catch (SQLException e) {
-            String strError = "Error SQL: " + e.getMessage();
-            logger.error(strError);
+            try {
+                return controller.save(funko)
+                        .doOnNext(savedFunko -> {
+                            if (savedFunko != null) {
+                                logger.info(savedFunko.toString());
+                            } else {
+                                logger.info("No se ha guardado el Funko.");
+                            }
+                        })
+                        .onErrorResume(e -> {
+                            if (e instanceof FunkoNotSavedException || e instanceof FunkoNotValidException) {
+                                String strError = "No se ha podido guardar el Funko: " + e.getMessage();
+                                logger.error(strError);
+                            }
+                            return Mono.empty();
+                        });
+            } catch (SQLException e) {
+                String strError = "No se ha podido guardar el Funko: " + e.getMessage();
+                logger.error(strError);
+            } catch (FunkoNotSavedException e) {
+                String strError = "Funko no guardado: " + e.getMessage();
+                logger.error(strError);
+            } catch (FunkoNotValidException e) {
+                String strError = "Funko no válido: " + e.getMessage();
+                logger.error(strError);
+            }
             return Mono.empty();
-        } catch (FunkoNotSavedException e) {
-            String strError = "No se ha encontrado el Funko: " + e.getMessage();
-            logger.error(strError);
-            return Mono.empty();
-        } catch (FunkoNotValidException e) {
-            String strError = "Funko no válido: " + e.getMessage();
-            logger.error(strError);
-            return Mono.empty();
-        }
+        });
     }
 
 
@@ -624,35 +621,32 @@ public class FunkoProgram {
      * @return Datos
      */
     private Mono<Funko> printFindById(UUID id, boolean isCorrect) {
-        try {
-            return controller.findById(id)
-                    .doOnEach(signal -> {
-                        if (isCorrect) {
-                            logger.info("🟢 Probando caso correcto de FindById...");
-                        } else {
-                            logger.info("🔴 Probando caso incorrecto de FindById...");
-                        }
-                        logger.info("\nFind by Id:");
-                        if (signal.hasValue()) {
-                            logger.info(signal.get().toString());
-                        } else {
-                            logger.info("No se encontró un Funko con el ID especificado.");
-                        }
-                    })
-                    .onErrorResume(e -> {
-                        String strError = "No se ha encontrado el Funko con id " + id + " -> " + e.getMessage();
-                        logger.error(strError);
-                        return Mono.empty();
-                    });
-        } catch (SQLException e) {
-            String strError = "Error SQL: " + e.getMessage();
-            logger.error(strError);
-            return Mono.empty();
-        } catch (FunkoNotFoundException e) {
-            String strError = "No se ha encontrado el Funko: " + e.getMessage();
-            logger.error(strError);
-            return Mono.empty();
-        }
+        return Mono.defer(() -> {
+            if (isCorrect) {
+                logger.info("🟢 Probando caso correcto de FindById...");
+            } else {
+                logger.info("🔴 Probando caso incorrecto de FindById...");
+            }
+            logger.info("\nFind by Id:");
+
+            try {
+                return controller.findById(id)
+                        .doOnNext(funko -> {
+                            if (funko != null) {
+                                logger.info(funko.toString());
+                            } else {
+                                logger.info("No se encontró un Funko con el ID especificado.");
+                            }
+                        })
+                        .onErrorResume(e -> {
+                            String strError = "No se ha encontrado el Funko con id " + id + " -> " + e.getMessage();
+                            logger.error(strError);
+                            return Mono.empty();
+                        });
+            } catch (SQLException | FunkoNotFoundException e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
 
@@ -709,9 +703,7 @@ public class FunkoProgram {
                         logger.error(strError);
                         return Flux.empty();
                     });
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        } catch (FunkoNotFoundException e) {
+        } catch (SQLException | FunkoNotFoundException e) {
             throw new RuntimeException(e);
         }
     }
@@ -724,21 +716,17 @@ public class FunkoProgram {
      */
     public Mono<Void> loadFunkosFileAndInsertToDatabase(String path) {
         CsvManager csvManager = CsvManager.getInstance();
-
         try {
             return csvManager.fileToFunkoList(path)
                     .flatMap(funko -> {
                         try {
                             return controller.save(funko)
                                     .onErrorResume(e -> {
-                                        logger.error("Error al insertar el Funko en la base de datos: " + e.getMessage());
+                                        String str = "Error al insertar el Funko en la base de datos: " + e.getMessage();
+                                        logger.error(str);
                                         return Mono.empty();
                                     });
-                        } catch (SQLException e) {
-                            throw new RuntimeException(e);
-                        } catch (FunkoNotSavedException e) {
-                            throw new RuntimeException(e);
-                        } catch (FunkoNotValidException e) {
+                        } catch (SQLException | FunkoNotSavedException | FunkoNotValidException e) {
                             throw new RuntimeException(e);
                         }
                     })
