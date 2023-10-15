@@ -191,4 +191,13 @@ public class FunkoServiceImpl implements FunkoService<List<Funko>> {
     public void shutdown() {
         cache.shutdown();
     }
+
+    /**
+     * Recibe las notificaciones
+     *
+     * @return notificaciones
+     */
+    public Flux<Notification<Funko>> getNotifications() {
+        return funkoNotification.getNotificationAsFlux();
+    }
 }

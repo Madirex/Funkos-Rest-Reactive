@@ -4,11 +4,13 @@ import com.madirex.exceptions.FunkoNotFoundException;
 import com.madirex.exceptions.FunkoNotRemovedException;
 import com.madirex.exceptions.FunkoNotSavedException;
 import com.madirex.exceptions.FunkoNotValidException;
+import com.madirex.models.Notification;
 import com.madirex.models.funko.Funko;
 import com.madirex.services.crud.funko.FunkoServiceImpl;
 import com.madirex.validators.FunkoValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.CorePublisher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -174,5 +176,14 @@ public class FunkoController implements BaseController<Funko, UUID> {
      */
     public void shutdown() {
         funkoService.shutdown();
+    }
+
+    /**
+     * Recone las notificaciones
+     *
+     * @return Notificaciones
+     */
+    public Flux<Notification<Funko>> getNotifications() {
+        return funkoService.getNotifications();
     }
 }

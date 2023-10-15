@@ -14,6 +14,7 @@ import com.madirex.services.io.CsvManager;
 import com.madirex.services.notifications.FunkoNotificationImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -23,6 +24,7 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -63,15 +65,44 @@ public class FunkoProgram {
     public void init() {
         logger.info("Programa de Funkos iniciado.");
         var loadAndUploadFunkos = loadFunkosFileAndInsertToDatabase("data" + File.separator + "funkos.csv");
+        loadNotificationSystem();
         loadAndUploadFunkos.block();
-        Mono<Void> serviceExceptionMono = callAllServiceExceptionMethods();
+        var serviceExceptionMono = callAllServiceExceptionMethods();
         Mono<Void> serviceMono = callAllServiceMethods();
         Mono<Void> queriesMono = databaseQueries();
-        Mono<Void> allOperationsMono = Mono.when(serviceExceptionMono, serviceMono, queriesMono);
+        Mono<Void> allOperationsMono = Mono.when(serviceMono, serviceExceptionMono, queriesMono);
         allOperationsMono.doFinally(signalType -> {
             controller.shutdown();
             logger.info("Programa de Funkos finalizado.");
         }).subscribe();
+    }
+
+    /**
+     * Carga el sistema de notificaciones
+     *
+     * @return disposable
+     */
+    private Disposable loadNotificationSystem() {
+        logger.info("Cargando sistema de notificaciones...");
+        return controller.getNotifications().subscribe(
+                notification -> {
+                    String msg = "Notificación emitida";
+                    switch (notification.getType()) {
+                        case NEW:
+                            msg = "🟢 Funko insertado: " + notification.getContent();
+                            break;
+                        case UPDATED:
+                            msg = "🟠 Funko actualizado: " + notification.getContent();
+                            break;
+                        case DELETED:
+                            msg = "🔴 Funko eliminado: " + notification.getContent();
+                            break;
+                    }
+                    logger.info(msg);
+                },
+                error -> logger.error("Se ha producido un error: " + error),
+                () -> logger.info("Sistema de notificaciones cargado.")
+        );
     }
 
     /**
@@ -169,22 +200,34 @@ public class FunkoProgram {
      * @return Devuelve los datos
      */
     private Flux<Funko> printListOfFunkosOfName(String name) {
+        AtomicBoolean almostOne = new AtomicBoolean(false);
         try {
-            return controller.findByName(name)
-                    .doOnNext(funko -> {
-                        if (funko != null) {
-                            logger.info("🔵 Funko encontrado: " + funko);
+            return controller.findAll()
+                    .filter(funko -> funko.getName().startsWith(name))
+                    .doOnEach(funko -> {
+                        String str = "";
+                        if (funko.hasValue()) {
+                            str = "🔵 Funko encontrado: " + funko.get();
+                            almostOne.set(true);
+                            logger.info(str);
                         } else {
-                            logger.info("🔵 No se encontró un Funko con el nombre: " + name);
+                            if (!almostOne.get()) {
+                                str = "🔵 No se encontró un Funko con el nombre: " + name;
+                                logger.info(str);
+                            }
                         }
                     })
                     .onErrorResume(e -> {
-                        String str = "Error al buscar el Funko: " + e;
+                        String str = "Error: " + e;
                         logger.error(str);
                         return Mono.empty();
                     });
+        } catch (SQLException e) {
+            String str = "ERROR SQL: " + e;
+            logger.error(str);
+            return Flux.empty();
         } catch (FunkoNotFoundException e) {
-            String str = "Funko no encontrado: " + e;
+            String str = "Funkos no encontrados: " + e;
             logger.error(str);
             return Flux.empty();
         }
@@ -201,7 +244,10 @@ public class FunkoProgram {
             return controller.findAll()
                     .filter(funko -> funko.getName().startsWith(name))
                     .count()
-                    .doOnSuccess(count -> logger.info("🔵 Número de Funkos de " + name + ": " + count))
+                    .doOnSuccess(count -> {
+                        String str = "🔵 Número de Funkos de " + name + ": " + count;
+                        logger.info(str);
+                    })
                     .onErrorResume(e -> {
                         String str = "Funkos no encontrados: " + e;
                         logger.error(str);
@@ -234,7 +280,8 @@ public class FunkoProgram {
                     })
                     .filter(funko -> funko.getReleaseDate().getYear() == year)
                     .doOnNext(filteredFunko -> {
-                        logger.info("🔵 Funko lanzado en el año " + year + ": " + filteredFunko.toString());
+                        String str = "🔵 Funko lanzado en el año " + year + ": " + filteredFunko;
+                        logger.info(str);
                     });
         } catch (SQLException e) {
             String str = "ERROR SQL: " + e;
