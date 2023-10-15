@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Clase FunkoProgram que contiene el programa principal
@@ -167,11 +168,10 @@ public class FunkoProgram {
      * @param name Nombre del Funko
      * @return Devuelve los datos
      */
-    private Mono<Funko> printListOfFunkosOfName(String name) {
+    private Flux<Funko> printListOfFunkosOfName(String name) {
         try {
             return controller.findByName(name)
-                    .next()
-                    .doOnSuccess(funko -> {
+                    .doOnNext(funko -> {
                         if (funko != null) {
                             logger.info("🔵 Funko encontrado: " + funko);
                         } else {
@@ -184,22 +184,24 @@ public class FunkoProgram {
                         return Mono.empty();
                     });
         } catch (FunkoNotFoundException e) {
-            logger.info("🔵 No se encontró un Funko con el nombre: " + name);
-            return Mono.empty();
+            String str = "Funko no encontrado: " + e;
+            logger.error(str);
+            return Flux.empty();
         }
     }
 
-    private Mono<Object> printNumberOfFunkosOfName(String name) {
+    /**
+     * Imprime el número de Funkos por nombre
+     *
+     * @param name nombre
+     * @return Número
+     */
+    private Mono<Long> printNumberOfFunkosOfName(String name) {
         try {
             return controller.findAll()
-                    .collectList()
-                    .flatMap(funkos -> {
-                        long count = funkos.stream()
-                                .filter(f -> f.getName().startsWith(name))
-                                .count();
-                        logger.info("🔵 Número de Funkos de " + name + ": " + count);
-                        return Mono.empty();
-                    })
+                    .filter(funko -> funko.getName().startsWith(name))
+                    .count()
+                    .doOnSuccess(count -> logger.info("🔵 Número de Funkos de " + name + ": " + count))
                     .onErrorResume(e -> {
                         String str = "Funkos no encontrados: " + e;
                         logger.error(str);
@@ -223,28 +225,26 @@ public class FunkoProgram {
      * @return Devuelve los datos
      */
     private Flux<Funko> printFunkosReleasedIn(int year) {
-        return Flux.defer(() -> {
-                    try {
-                        return controller.findAll();
-                    } catch (SQLException e) {
-                        String str = "ERROR SQL: " + e;
+        try {
+            return controller.findAll()
+                    .onErrorResume(e -> {
+                        String str = "Fallo al obtener Funkos: " + e;
                         logger.error(str);
                         return Flux.empty();
-                    } catch (FunkoNotFoundException e) {
-                        String str = "Funkos no encontrados: " + e;
-                        logger.error(str);
-                        return Flux.empty();
-                    }
-                })
-                .filter(funko -> funko.getReleaseDate().getYear() == year)
-                .doOnNext(filteredFunko -> {
-                    logger.info("🔵 Funko lanzado en el año " + year + ": " + filteredFunko.toString());
-                })
-                .onErrorResume(e -> {
-                    String str = "Funkos no encontrados: " + e;
-                    logger.error(str);
-                    return Mono.empty();
-                });
+                    })
+                    .filter(funko -> funko.getReleaseDate().getYear() == year)
+                    .doOnNext(filteredFunko -> {
+                        logger.info("🔵 Funko lanzado en el año " + year + ": " + filteredFunko.toString());
+                    });
+        } catch (SQLException e) {
+            String str = "ERROR SQL: " + e;
+            logger.error(str);
+            return Flux.empty();
+        } catch (FunkoNotFoundException e) {
+            String str = "Funkos no encontrados: " + e;
+            logger.error(str);
+            return Flux.empty();
+        }
     }
 
 
@@ -323,22 +323,12 @@ public class FunkoProgram {
      *
      * @return Datos
      */
-    private Mono<Object> printAvgPriceOfFunkos() {
+    private Mono<Double> printAvgPriceOfFunkos() {
         try {
             return controller.findAll()
-                    .collectList()
-                    .flatMap(funkos -> {
-                        logger.info("🔵 Media de precio de Funkos...");
-
-                        double averagePrice = funkos.stream()
-                                .mapToDouble(Funko::getPrice)
-                                .average()
-                                .orElse(0.0); // Si no hay Funkos, establecemos un valor por defecto
-
-                        logger.info(String.format("%.2f", averagePrice));
-
-                        return Mono.empty();
-                    })
+                    .map(Funko::getPrice)
+                    .collect(Collectors.averagingDouble(Double::doubleValue))
+                    .doOnSuccess(averagePrice -> logger.info("🔵 Media de precio de Funkos: " + String.format("%.2f", averagePrice)))
                     .onErrorResume(e -> {
                         String str = "Fallo al calcular la media de precio de Funkos: " + e;
                         logger.error(str);
