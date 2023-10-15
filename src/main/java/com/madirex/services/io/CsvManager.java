@@ -49,7 +49,7 @@ public class CsvManager {
      */
     public Flux<Funko> fileToFunkoList(String path) throws ReadCSVFailException {
         try {
-            var result = Flux.fromStream(Files.lines(Paths.get(path)))
+            return Flux.fromStream(Files.lines(Paths.get(path)))
                     .skip(1)
                     .map(line -> {
                         String[] values = line.split(",");
@@ -62,7 +62,6 @@ public class CsvManager {
                                 .releaseDate(LocalDate.parse(values[4]))
                                 .build();
                     });
-            return result;
         } catch (IOException e) {
             throw new ReadCSVFailException(e.getMessage());
         }
