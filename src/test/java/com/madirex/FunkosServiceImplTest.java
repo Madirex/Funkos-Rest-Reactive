@@ -1,6 +1,7 @@
 package com.madirex;
 
 import com.madirex.exceptions.FunkoNotFoundException;
+import com.madirex.models.Notification;
 import com.madirex.models.funko.Funko;
 import com.madirex.models.funko.Model;
 import com.madirex.repositories.funko.FunkoRepositoryImpl;
@@ -234,6 +235,16 @@ class FunkosServiceImplTest {
         FunkoServiceImpl instance1 = FunkoServiceImpl.getInstance(repository, cache, backupService, FunkoNotificationImpl.getInstance());
         FunkoServiceImpl instance2 = FunkoServiceImpl.getInstance(repository, cache, backupService, FunkoNotificationImpl.getInstance());
         assertSame(instance1, instance2);
+    }
+
+    /**
+     * Test para GetNotifications
+     */
+    @Test
+    public void testGetNotifications() {
+        Flux<Notification<Funko>> simulatedNotifications = Flux.just();
+        Mockito.when(service.getNotifications()).thenReturn(simulatedNotifications);
+        assertNotNull(service.getNotifications());
     }
 
 }
