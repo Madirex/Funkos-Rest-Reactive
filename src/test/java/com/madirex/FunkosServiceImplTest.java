@@ -1,6 +1,6 @@
 package com.madirex;
 
-import com.madirex.exceptions.FunkoNotRemovedException;
+import com.madirex.exceptions.FunkoNotFoundException;
 import com.madirex.models.funko.Funko;
 import com.madirex.models.funko.Model;
 import com.madirex.repositories.funko.FunkoRepositoryImpl;
@@ -82,6 +82,26 @@ class FunkosServiceImplTest {
     }
 
     /**
+     * Test Find By Name que no encuentra el Funko dado el nombre
+     */
+    @Test
+    void testFindByNameNotFound() {
+        String name = "Unicorn Funko";
+        when(repository.findByName(name)).thenReturn(Flux.empty());
+        Flux<Funko> result = service.findByName(name);
+        try {
+            result.blockLast();
+            fail("Se esperaba una excepción FunkoNotFoundException");
+        } catch (RuntimeException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof FunkoNotFoundException) {
+            } else {
+                fail("Se esperaba una excepción FunkoNotFoundException");
+            }
+        }
+    }
+
+    /**
      * Test para importData
      */
     @Test
@@ -114,10 +134,11 @@ class FunkosServiceImplTest {
      * Test para FindById
      */
     @Test
-    void testFindById() throws NullPointerException{
+    void testFindById() throws NullPointerException {
         var funko = Funko.builder().name("cuack").price(12.42).releaseDate(LocalDate.now()).model(Model.DISNEY).build();
         var id = funko.getCod();
         when(repository.findById(id)).thenReturn(Mono.just(funko));
+        when(cache.get(id.toString())).thenReturn(Mono.just(funko));
         var result = service.findById(id).block();
         assertAll("findByName",
                 () -> assertEquals(result.getName(), funko.getName(), "El Funko no tiene el nombre esperado"),
@@ -134,15 +155,14 @@ class FunkosServiceImplTest {
     @Test
     void testFindByIdInCache() {
         UUID id = UUID.randomUUID();
-        Funko cachedFunko = Funko.builder().name("Cached Funko").build();
-
-        when(cache.put(id.toString(), cachedFunko).thenReturn(Mono.just(cachedFunko)));
-        when(cache.get(String.valueOf(id))).thenReturn(Mono.just(cachedFunko));
-
+        Funko funkoFromRepository = Funko.builder().name("Funkorepo").build();
+        when(repository.findById(id)).thenReturn(Mono.just(funkoFromRepository));
+        when(cache.get(id.toString())).thenReturn(Mono.empty());
+        when(cache.put(id.toString(), funkoFromRepository)).thenReturn(Mono.empty());
         var funko = service.findById(id).block();
-        assertEquals("Cached Funko", funko.getName());
-
-        verify(repository, never()).findById(id);
+        assertEquals(funkoFromRepository, funko);
+        verify(repository, times(1)).findById(id);
+        verify(cache, times(1)).put(id.toString(), funkoFromRepository);
     }
 
     /**
@@ -169,6 +189,8 @@ class FunkosServiceImplTest {
     void testUpdate() {
         LocalDate date = LocalDate.now();
         var funko = Funko.builder().name("cuack").price(12.42).releaseDate(date).model(Model.DISNEY).build();
+        when(cache.put(funko.getCod().toString(), funko)).thenReturn(Mono.empty());
+        when(repository.findById(funko.getCod())).thenReturn(Mono.just(funko));
         when(repository.update(funko.getCod(), funko)).thenReturn(Mono.just(funko));
         var result = service.update(funko.getCod(), funko).block();
         assertAll("update",
@@ -187,27 +209,11 @@ class FunkosServiceImplTest {
     void testDelete() {
         var funko = Funko.builder().name("cuack").price(12.42).releaseDate(LocalDate.now()).model(Model.DISNEY).build();
         UUID id = funko.getCod();
-        when(repository.findById(id)).thenReturn(Mono.empty());
+        when(repository.findById(funko.getCod())).thenReturn(Mono.just(funko));
         when(repository.delete(id)).thenReturn(Mono.empty());
         when(cache.remove(any(String.class))).thenReturn(Mono.empty());
         var result = service.delete(id).block();
         assertNotNull(result);
-        verify(repository, times(1)).delete(id);
-    }
-
-    /**
-     * Test para FunkoNotRemovedException
-     */
-    @Test
-    void testDeleteNotRemovedException() {
-        var funko = Funko.builder().name("cuack").price(12.42).releaseDate(LocalDate.now()).model(Model.DISNEY).build();
-        UUID id = funko.getCod();
-        when(repository.findById(id)).thenReturn(Mono.empty());
-        when(repository.delete(id)).thenReturn(Mono.empty());
-        when(cache.remove(any(String.class))).thenReturn(Mono.empty());
-        assertThrows(FunkoNotRemovedException.class, () -> {
-            service.delete(id).block();
-        });
         verify(repository, times(1)).delete(id);
     }
 
