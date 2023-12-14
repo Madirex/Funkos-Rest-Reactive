@@ -178,7 +178,7 @@ findByName y se bloquea antes de hacer las comprobaciones. Finalmente, se verifi
 
 ## ⚙ Herramientas
 
-- Java 11.
+- Java 17.
 - Gradle.
 - H2.
 - JUnit.
